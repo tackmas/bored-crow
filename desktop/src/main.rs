@@ -1,8 +1,9 @@
 use sysinfo::System;
 use tokio::runtime;
 
-mod logic;
+mod core;
 mod ui;
+mod platform;
 
 #[cfg(feature = "error")]
 mod error;
@@ -11,10 +12,10 @@ fn main() {
     let _s = System::new_all();
     let _runtime = runtime::Builder::new_current_thread().build().unwrap();
 
-    let desktop_files = logic::apps::get_desktop_files().unwrap();
-    ui::config::display_applications(&desktop_files);
+    let platform = platform::create_platform();
+    ui::config::display_applications(&platform);
 
-    let blocked_input = ui::config::get_input(&desktop_files);
+    let blocked_input = ui::config::get_input(&platform);
 
     for app in &blocked_input {
         println!("{:?}", app);

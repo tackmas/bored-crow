@@ -6,7 +6,17 @@ use std::{
 };
 use freedesktop_file_parser::DesktopFile;
 
-pub fn get_desktop_files() -> io::Result<Vec<DesktopFile>> {
+pub fn main() {
+    let files = get_desktop_files().unwrap();
+    for file in files {
+        let name = file.entry.name.default;
+
+        println!{"{name}"};
+    }
+}
+
+
+fn get_desktop_files() -> io::Result<Vec<DesktopFile>> {
     let mut directories = HashMap::new();
 
     directories.insert("system", PathBuf::from("/usr/share/applications/"));

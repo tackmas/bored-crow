@@ -7,7 +7,10 @@ default-run = "desktop"
 [dependencies]
 sysinfo = "0.37.2"
 tokio = {version = "1.49.0", features = ["full"]}
+tokio-stream = "0.1.18"
 freedesktop-file-parser = "0.3.1"
+libcopes = "=1.0.0"
+futures = "0.3.31"
 
 [features]
 error = []
