@@ -5,13 +5,10 @@ use std::{
     path::PathBuf,
 };
 use freedesktop_file_parser::DesktopFile;
-
-pub fn run() -> Vec<String> {
-    get_apps().unwrap()
-}
+use super::App;
 
 
-fn get_apps() -> io::Result<Vec<String>> {
+pub fn apps() -> io::Result<Vec<App>> {
     let mut directories = HashMap::new();
 
     directories.insert("system", PathBuf::from("/usr/share/applications/"));
@@ -26,7 +23,7 @@ fn get_apps() -> io::Result<Vec<String>> {
         PathBuf::from("/var/lib/snapd/desktop/applications/")
     ]; */
 
-    let mut app_names = Vec::new();
+    let mut apps = Vec::new();
 
     for (_scope, dir) in directories {
         if !dir.is_dir() {
@@ -47,14 +44,14 @@ fn get_apps() -> io::Result<Vec<String>> {
                 continue;
             }
 
-            let name = into_app_name(desktop_file);
+            let app = into_app(desktop_file);
 
           //  lowercase_app_names(&mut desktop_file);
 
-            app_names.push(name);
+            apps.push(app);
         }
     }
-    Ok(app_names)
+    Ok(apps)
 }
 
 fn parse_to_desktop(file_entry: &fs::DirEntry) -> DesktopFile {
@@ -78,15 +75,8 @@ fn is_hidden_or_nodisplay(desktop_file: &DesktopFile) -> bool {
     }
 }
 
-fn into_app_name(desktop_file: DesktopFile) -> String {
-    desktop_file.entry.name.default
+fn into_app(desktop_file: DesktopFile) -> App {
+    App { 
+        name: desktop_file.entry.name.default,
+    }
 }
-
-
-/* 
-fn lowercase_app_names(desktop_file: &mut DesktopFile) {
-    let name = &mut desktop_file.entry.name.default;
-
-    name.make_ascii_lowercase();
-}
-    */

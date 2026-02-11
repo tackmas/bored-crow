@@ -1,42 +1,22 @@
-use sysinfo::System;
-use tokio::runtime;
+use std::thread;
 
-mod core;
-mod ui;
+use tokio::runtime::Runtime;
+
 mod platform;
 
-#[cfg(feature = "error")]
-mod error;
-
-
 fn main() {
-    let runtime = runtime::Runtime::new().unwrap();
-    let handle = runtime.handle();
+    let runtime = Runtime::new().unwrap();
+    let _guard = runtime.enter();
+    
+    let blocker = platform::Blocker::new();
 
-    let platform = platform::Platform::new(handle);
+    let mut apps = platform::App::all_apps().unwrap();
 
-    platform.lock().unwrap().refresh();
+    blocker.block(&mut apps[0]).unwrap();
 
-
-    ui::config::display_applications(&platform.lock().unwrap());
-
-    let blocked_input = ui::config::get_input(&platform.lock().unwrap());
-
-    for name in &blocked_input {
-        let inner = platform.lock().unwrap();
-
-        let app = inner.app(name).unwrap();
-
-        app.block();
+    for app in &apps {
+        println!{"{app:?}"};
     }
 
-    for app in &blocked_input {
-        println!("{:?}", app);
-    }
-
-    /*runtime.block_on(async {
-        check_processes(&s, &blocked).await;
-        
-    });*/
-
+    thread::sleep(std::time::Duration::from_secs(20));
 }

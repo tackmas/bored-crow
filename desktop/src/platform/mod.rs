@@ -1,105 +1,74 @@
-use std::io::Result;
-use std::sync::{Arc, Mutex};
+
+use std::io;
+
 use tokio::{
-    runtime::Handle,
-    sync::mpsc
+    sync::{mpsc, oneshot}
 };
 
 mod blocker;
-
-#[cfg(target_os = "linux")]
 mod linux;
 
-#[cfg(target_os = "windows")]
-mod windows;
-
-pub struct Blocker<T> {
-    sender: mpsc::Sender<T>,
-    reciever: mpsc::Receiver<T>
+struct Request<T, R> {
+    data: T,
+    reply: oneshot::Sender<R>,
 }
 
-#[derive(Debug)]
+impl<T, R> Request<T, R> {
+    fn new(data: T) -> (Request<T, R>, oneshot::Receiver<R>) {
+        let (reply, response) = oneshot::channel();
+        
+        (Request { data, reply }, response)
+    }   
+}
+
+#[derive(Clone, Debug)]
 pub struct App {
     name: String,
-    is_blocked: bool
 }
 
 impl App {
-    pub fn name(&self) -> &String {
-        &self.name
-    }
-    pub fn is_blocked(&self) -> &bool {
-        &self.is_blocked
-    }
-    pub fn block(&mut self) {
-        self.is_blocked = true;
-    }
-    pub fn unblock(&mut self) {
-        self.is_blocked = false;
+    pub fn all_apps() -> io::Result<Vec<App>>  {
+        linux::apps()
     }
 }
 
-#[derive(Debug)]
-pub struct Platform {
-    apps: Vec<App>
+pub struct Blocker {
+    sender: mpsc::Sender<Request<BlockAction, Result<(), String>>>
 }
 
-impl Platform {
-    pub fn new(rt_handle: &Handle) -> Arc<Mutex<Platform>> {
-        let apps: Vec<App> = get_app_names()
-            .into_iter()
-            .map(|name| {
-                App {
-                    name,
-                    is_blocked: false
-                }
-            })
-            .collect();
+impl Blocker {
+    pub fn new() -> Blocker {
+        let (sender, reciever) = mpsc::channel(100); 
 
-        let platform = Arc::new(Mutex::new(Platform { apps }));
-        
-        blocker::run(Arc::clone(&platform), rt_handle);
+        blocker::run(reciever);
 
-        platform
+        Blocker {sender}
     }
-    pub fn refresh(&mut self) {
-        let apps: Vec<App> = get_app_names()
-            .into_iter()
-            .map(|name| {
-                App {
-                    name,
-                    is_blocked: false
-                }
-            })
-            .collect();
+    pub fn block(&self, app: &mut App) -> Result<(), String>  {
+        let (request, response) = Request::new(
+            BlockAction::Block(app.clone())
+        );
 
-        self.apps = apps;
+        self.sender.blocking_send(request).unwrap();
+
+        let response: Result<(), String> = response.blocking_recv().unwrap();
+
+        response
     }
-    pub fn list_apps(&self) -> &Vec<App> {
-        &self.apps
-    }
-    pub fn app(&self, name: &str) -> Option<&App> {
-        self.apps
-            .iter()
-            .find(|&app| app.name == *name)
-    }
-    pub fn list_blocked(&self) -> impl Clone + Iterator<Item=&App> {
-        self.apps
-            .iter()
-            .filter(|app| app.is_blocked)
+    pub fn unblock(&self, app: &mut App) -> Result<(), String> {
+        let (request, response) = Request::new(
+            BlockAction::Unblock(app.clone())
+        );
+
+        self.sender.blocking_send(request).unwrap();
+
+        let response = response.blocking_recv().unwrap();
+
+        response
     }
 }
 
-fn get_app_names() -> Vec<String> {
-    #[cfg(target_os = "linux")]
-    let names = linux::apps::run();
-
-    #[cfg(target_os = "windows")]
-    let names = windows::apps::run();
-
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-    panic!("unsupported OS");
-
-    names
+enum BlockAction {
+    Block(App),
+    Unblock(App)
 }
-
