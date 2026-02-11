@@ -8,14 +8,27 @@ mod platform;
 #[cfg(feature = "error")]
 mod error;
 
+
 fn main() {
-    let _s = System::new_all();
-    let _runtime = runtime::Builder::new_current_thread().build().unwrap();
+    let runtime = runtime::Runtime::new().unwrap();
+    let handle = runtime.handle();
 
-    let platform = platform::create_platform();
-    ui::config::display_applications(&platform);
+    let platform = platform::Platform::new(handle);
 
-    let blocked_input = ui::config::get_input(&platform);
+    platform.lock().unwrap().refresh();
+
+
+    ui::config::display_applications(&platform.lock().unwrap());
+
+    let blocked_input = ui::config::get_input(&platform.lock().unwrap());
+
+    for name in &blocked_input {
+        let inner = platform.lock().unwrap();
+
+        let app = inner.app(name).unwrap();
+
+        app.block();
+    }
 
     for app in &blocked_input {
         println!("{:?}", app);

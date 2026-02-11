@@ -2,7 +2,7 @@ use std::{
     io,
 };
 use freedesktop_file_parser::DesktopFile;
-use crate::platform::{CurrentPlatform, Platform};
+use crate::platform::Platform;
 
 pub fn _desktop_names(desktop_files: &Vec<DesktopFile>) -> Vec<&String> {
     desktop_files
@@ -12,13 +12,13 @@ pub fn _desktop_names(desktop_files: &Vec<DesktopFile>) -> Vec<&String> {
 }
 
 
-pub fn display_applications(platform: &CurrentPlatform) {
-    for name in platform.app_names() {
+pub fn display_applications(platform: &Platform) {
+    for name in platform.list_apps() {
         println!("{:?}", name);
     }
 }
 
-pub fn get_input(platform: &CurrentPlatform) -> Vec<String> {
+pub fn get_input(platform: &Platform) -> Vec<String> {
     let mut input = Vec::new();
 
     println!("What applications would you like to be blocked?\n
@@ -36,8 +36,11 @@ Enter each application name per line. Finish by entering 'done' on a new line.")
 
         let mut is_application = false;
 
-        if platform.app_names().contains(line) {
-
+        for app in platform.list_apps() {
+            if *app.name() == line {
+                is_application = true;
+                break;
+            }
         }
 
         if line == "done" {

@@ -25,7 +25,7 @@ fn detect_blocked_apps() {
 } 
 
 
-fn create_desktop_entry(file_name: &String) {
+fn _create_desktop_entry(file_name: &String) {
     let home = env::var("HOME").expect("$HOME enviroment variable is invalid or not set");
 
     let directory = format!("{}.local/share/applications", home);

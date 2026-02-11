@@ -1,6 +1,11 @@
 use std::io::Result;
+use std::sync::{Arc, Mutex};
+use tokio::{
+    runtime::Handle,
+    sync::mpsc
+};
 
-use crate::platform::linux::LinuxPlatform;
+mod blocker;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -8,69 +13,80 @@ mod linux;
 #[cfg(target_os = "windows")]
 mod windows;
 
-pub trait App {
-    fn name(&self) -> &String;
-    fn is_blocked(&self) -> &bool;
-    fn block(&mut self) -> Result<()>;
+pub struct Blocker<T> {
+    sender: mpsc::Sender<T>,
+    reciever: mpsc::Receiver<T>
 }
 
-pub trait Platform {
-    fn new() -> Self where Self: Sized;
-    fn list_apps(&self) -> Vec<&impl App>;
-    fn app(&self, name: &str) -> &impl App;
-    fn list_blocked(&self) -> Vec<&String>;
-}
-
-pub struct App2 {
+#[derive(Debug)]
+pub struct App {
     name: String,
     is_blocked: bool
 }
 
-impl App2 {
+impl App {
     pub fn name(&self) -> &String {
         &self.name
     }
     pub fn is_blocked(&self) -> &bool {
         &self.is_blocked
     }
-    pub fn block(&mut self) -> Result<()> {
-
+    pub fn block(&mut self) {
+        self.is_blocked = true;
+    }
+    pub fn unblock(&mut self) {
+        self.is_blocked = false;
     }
 }
 
-
-
-
-
-pub struct Platform2 {
-    apps: Vec<App2>
+#[derive(Debug)]
+pub struct Platform {
+    apps: Vec<App>
 }
 
-impl Platform2 {
-    pub fn new() -> Platform2 {
-        let apps: Vec<App2> = get_app_names()
+impl Platform {
+    pub fn new(rt_handle: &Handle) -> Arc<Mutex<Platform>> {
+        let apps: Vec<App> = get_app_names()
             .into_iter()
-            .map(|name| App2 {
-                 name,
-                is_blocked: false})
+            .map(|name| {
+                App {
+                    name,
+                    is_blocked: false
+                }
+            })
             .collect();
 
-        Platform2 { apps }
+        let platform = Arc::new(Mutex::new(Platform { apps }));
         
+        blocker::run(Arc::clone(&platform), rt_handle);
+
+        platform
     }
-    pub fn list_apps(&self) -> &Vec<App2> {
+    pub fn refresh(&mut self) {
+        let apps: Vec<App> = get_app_names()
+            .into_iter()
+            .map(|name| {
+                App {
+                    name,
+                    is_blocked: false
+                }
+            })
+            .collect();
+
+        self.apps = apps;
+    }
+    pub fn list_apps(&self) -> &Vec<App> {
         &self.apps
     }
-    pub fn app(&self, name: &str) -> Option<&App2> {
+    pub fn app(&self, name: &str) -> Option<&App> {
         self.apps
             .iter()
             .find(|&app| app.name == *name)
     }
-    pub fn list_blocked(&self) -> Vec<&App2> {
+    pub fn list_blocked(&self) -> impl Clone + Iterator<Item=&App> {
         self.apps
             .iter()
             .filter(|app| app.is_blocked)
-            .collect()
     }
 }
 
@@ -85,21 +101,5 @@ fn get_app_names() -> Vec<String> {
     panic!("unsupported OS");
 
     names
-}
-
-
-#[cfg(target_os = "linux")]
-pub type CurrentPlatform = LinuxPlatform;
-
-#[cfg(target_os = "windows")]
-pub type CurrentPlatform = WindowsPlatform;
-
-
-pub fn create_platform() -> impl Platform {
-    #[cfg(target_os = "linux")]
-    { LinuxPlatform::new() }
-
-    #[cfg(target_os = "windows")]
-    { WindowPlatform::new() }
 }
 
