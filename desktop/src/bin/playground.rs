@@ -1,9 +1,14 @@
+trait A<T> {
+    fn a(self) -> Self;
+}
+
+impl<T> A<T> for T {
+    fn a(self) -> Self {
+        self
+    }
+}
+
+
 fn main() {
-    let a = String::from("lol");
-
-    let b = &a;
-
-    let c = a;
-
-    println!("{b}");
+    println!("Hello world")
 }

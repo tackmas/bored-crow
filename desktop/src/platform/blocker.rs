@@ -12,23 +12,25 @@ use tokio::{
 };
 
 use super::{
-    BlockAction::{self, Block, Unblock},
+    App,
+    BlockerMessage,
+    BlockerReply,
     Request
 };
 
 
-pub fn run(mut receiver: Receiver<Request<BlockAction, Result<(), String>>>) {  
+pub fn run(mut receiver: Receiver<Request<BlockerMessage, BlockerReply>>) {  
     task::spawn(async move {
         let mut system = System::new_all();
         let mut block = HashSet::new();
-        let mut interval = time::interval(Duration::from_millis(1000));
+        let mut interval = time::interval(Duration::from_millis(500));
 
         loop {
             tokio::select! {
-                raw_msg = receiver.recv() => {
-                    match raw_msg {
-                        Some(msg) => {
-                            handle_req(msg, &mut block);
+                raw_req = receiver.recv() => {
+                    match raw_req {
+                        Some(req) => {
+                            handle_req(req, &mut block);
                         }
                         None => {
                             println!{"blocker channel has been closed"};
@@ -60,28 +62,60 @@ fn scan_and_kill_process(system: &mut System, apps: &HashSet<String>) {
     }
 } 
 
-fn handle_req(req: Request<BlockAction, Result<(), String>>, block: &mut HashSet<String>) {
+fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
     match req.data {
-        Block(app) => {
-            let exists = block.get(&app.name).is_some();
+        BlockerMessage::Block(app) => {
+            let exists = block.contains(&app.name);
 
             if exists {
-                req.reply.send(Err(format!("error: can not block an already blocked app ({})", app.name))).unwrap();
+                let reply = BlockerReply::Outcome(Err(format!("error: can not block an already blocked app ({})", app.name)));
+
+                req.reply.send(reply).unwrap();
                 return;
             }
 
             block.insert(app.name);
         }
 
-        Unblock(app) => {
+        BlockerMessage::Unblock(app) => {
             let exists = block.remove(&app.name);
 
             if !exists {
-                req.reply.send(Err(format!("error: can not unblock an already unblocked app ({})", app.name))).unwrap();
+                let reply = BlockerReply::Outcome(Err(format!("error: can not unblock an already unblocked app ({})", app.name)));
+
+                req.reply.send(reply).unwrap();
                 return;
             }
         }
+
+        BlockerMessage::GetInfo => {
+            let blocked: Vec<App> = block
+                .iter()
+                .map(|name| App::from(name.clone()))
+                .collect();
+
+            let reply = BlockerReply::Info(blocked);
+
+            req.reply.send(reply).unwrap();
+
+            return;
+        }
     }
 
-    req.reply.send(Ok(())).unwrap();
+    req.reply.send(BlockerReply::Outcome(Ok(()))).unwrap();
+}
+
+fn handle_req2(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
+    if let BlockerMessage::GetInfo = req.data {
+        let blocked: Vec<App> = block
+            .iter()
+            .map(|name| App::from(name.clone()))
+            .collect();
+
+        let reply = BlockerReply::Info(blocked);
+
+        req.reply.send(reply).unwrap();    
+    } else {
+        
+    }
 }

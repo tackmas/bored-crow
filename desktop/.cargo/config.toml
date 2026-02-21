@@ -1,0 +1,2 @@
+[alias]
+winrun = "build --target x86_64-pc-windows-gnu && !cmd.exe /C target\\x86_64-pc-windows-gnu\\debug\\desktop"
