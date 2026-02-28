@@ -70,7 +70,7 @@ fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<St
             if exists {
                 let reply = BlockerReply::Outcome(Err(format!("error: can not block an already blocked app ({})", app.name)));
 
-                req.reply.send(reply).unwrap();
+                req.replier.send(reply).unwrap();
                 return;
             }
 
@@ -83,7 +83,7 @@ fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<St
             if !exists {
                 let reply = BlockerReply::Outcome(Err(format!("error: can not unblock an already unblocked app ({})", app.name)));
 
-                req.reply.send(reply).unwrap();
+                req.replier.send(reply).unwrap();
                 return;
             }
         }
@@ -96,13 +96,13 @@ fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<St
 
             let reply = BlockerReply::Info(blocked);
 
-            req.reply.send(reply).unwrap();
+            req.replier.send(reply).unwrap();
 
             return;
         }
     }
 
-    req.reply.send(BlockerReply::Outcome(Ok(()))).unwrap();
+    req.replier.send(BlockerReply::Outcome(Ok(()))).unwrap();
 }
 
 fn handle_req2(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
@@ -114,7 +114,7 @@ fn handle_req2(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<S
 
         let reply = BlockerReply::Info(blocked);
 
-        req.reply.send(reply).unwrap();    
+        req.replier.send(reply).unwrap();    
     } else {
         
     }

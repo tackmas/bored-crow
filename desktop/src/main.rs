@@ -8,27 +8,23 @@ mod platform;
 mod ui;
 
 use ui::gui;
+use ui::gui2;
+
 
 fn main() {
     let runtime = Runtime::new().unwrap();
     let _guard = runtime.enter();
     
-    let blocker = platform::Blocker::new();
+
 
     let apps = platform::App::all_apps().unwrap();
 
     ui::configg::display_applications(&apps);
 
-    let i = apps.iter().position(|app| app.name() == "Discord").unwrap();
-
-    blocker.block(&apps[i]).unwrap();
-
 
     // ui::configg::prompt_block_selection(&apps);
 
-    gui::run().unwrap();
-
-    thread::sleep(Duration::from_secs(20));
+    gui2::run().unwrap();
 }
 
 // ./target/x86_64-pc-windows-gnu/debug/desktop.exe

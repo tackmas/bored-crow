@@ -8,18 +8,18 @@ mod apps;
 
 struct Request<T, R> {
     data: T,
-    reply: oneshot::Sender<R>,
+    replier: oneshot::Sender<R>,
 }
 
 impl<T, R> Request<T, R> {
     fn new(data: T) -> (Request<T, R>, oneshot::Receiver<R>) {
-        let (reply, response) = oneshot::channel();
+        let (replier, reciever) = oneshot::channel();
         
-        (Request { data, reply }, response)
+        (Request { data, replier }, reciever)
     }   
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct App {
     name: String,
 }
@@ -65,35 +65,35 @@ impl Blocker {
     pub fn block(&self, app: &App) -> Result<(), String>  {
         let msg = BlockerMessage::Block(app.clone());
 
-        let reply = self.blocker_request(msg);
+        let response = self.blocker_request(msg);
 
-        reply.outcome_inner()
+        response.outcome_inner()
     }
     pub fn unblock(&self, app: &App) -> Result<(), String> {
         let msg = BlockerMessage::Unblock(app.clone());
 
-        let reply = self.blocker_request(msg);
+        let response = self.blocker_request(msg);
 
-        reply.outcome_inner()
+        response.outcome_inner()
     }
 
     pub fn list_blocked(&self) -> Vec<App> {
         let msg = BlockerMessage::GetInfo;
 
-        let reply = self.blocker_request(msg);
+        let response = self.blocker_request(msg);
 
-        reply.info_inner()
+        response.info_inner()
     }
 
     fn blocker_request(&self, req_data: BlockerMessage) -> BlockerReply {   
-        let (request, response) = Request::new(
+        let (request, reciever) = Request::new(
             req_data
         );
         self.sender.blocking_send(request).unwrap();
 
-        let reply = response.blocking_recv().unwrap();
+        let response = reciever.blocking_recv().unwrap();
 
-        reply
+        response
     }
 }
 
