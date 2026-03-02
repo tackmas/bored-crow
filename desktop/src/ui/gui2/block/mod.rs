@@ -1,5 +1,9 @@
+mod new_group;
+
+// Dependencies
 use iced::{
     self,
+    alignment::Horizontal,
     Element,
     Length,
     widget::{
@@ -8,52 +12,115 @@ use iced::{
         Container,
         Row,
         Space,
+        Stack,
         Text,
     }
 };
 
+// Local
+use crate::gui2::Route;
 use crate::platform::App;
+use new_group::{NewGroupEvent, NewGroupState, OptionNewGroupState};
 
 #[derive(Clone)]
 pub enum BlockEvent {
-    NewGroup
+    NewGroup(Route<NewGroupEvent>),
 }
 
 struct Group {
-    inner: Vec<App>
+    inner: Vec<App>,
 }
 
 impl Group {
     fn new() -> Self {
-        Group { inner: Vec::new() }
+        let inner = Vec::new();
+
+        Group { inner }
     }
 }
 
 pub struct BlockState {
-    groups: Vec<Group>
+    groups: Vec<Group>,
+    option_new_group: Option<NewGroupState>,
 }
 
 impl BlockState {
     pub fn new() -> Self {
-        BlockState { groups: Vec::new() }
+        let groups = Vec::new();
+        let option_new_group = None;
+
+        BlockState { 
+            groups, 
+            option_new_group 
+        }
     }
 
     pub fn update(&mut self, event: BlockEvent) {
         match event {
-            BlockEvent::NewGroup => ()
+            BlockEvent::NewGroup(route) => {
+                match route {
+                    Route::Forward(event) => self.option_new_group.update(event),
+                    Route::Open =>{
+                        if self.option_new_group.is_none() {
+                            self.option_new_group = OptionNewGroupState::new();
+                        }
+                    } 
+                }
+            }
         }
-
     }   
 
     pub fn view(&self) -> Element<'_, BlockEvent> {
         let first_row = self.first_row();
         let group_list = self.group_list();
 
-        Column::with_children([
-            first_row.into(),
-            group_list.into()
-        ])
-        .into()
+        let column = 
+            Column::with_children([
+                first_row.into(),
+                group_list.into()
+            ])
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Horizontal::Center);
+
+        let stack_base = 
+            Stack::with_children([
+                column.into()
+            ]);
+
+        if self.option_new_group.is_some() {
+            let new_group_view = self.option_new_group
+                .view()
+                .map(|event| BlockEvent::NewGroup(Route::Forward(event)));
+
+            let stack = stack_base.push(new_group_view);
+
+            return stack.into();
+        }
+
+        stack_base.into()
+
+        /* 
+
+        let stack = {
+            let base = Stack::with_children([
+                column.into()
+            ]);
+
+            if self.new_group.is_some() {
+                let new_group = self.new_group
+                    .view()
+                    .map(|event| BlockEvent::NewGroup(Route::Forward(event)));
+
+                base.push(new_group)
+            } else {
+                base
+            }
+        };
+            
+        stack.into()
+
+        */
     }
 
     fn first_row(&self) -> Container<'_, BlockEvent> {
@@ -62,7 +129,6 @@ impl BlockState {
         let title = 
             Container::new(
                 Text::new("App Blocks")
-    
             )
             .center_x(Length::FillPortion(1))
             .center_y(Length::Fill);
@@ -72,7 +138,7 @@ impl BlockState {
                 Button::new(
                     Text::new("New Group")
                 )
-                .on_press(BlockEvent::NewGroup)
+                .on_press(BlockEvent::NewGroup(Route::Open))
             )
             .center_x(Length::FillPortion(1))
             .center_y(Length::Fill);
