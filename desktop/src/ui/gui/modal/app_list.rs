@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use iced::{Length, Alignment};
 use iced::widget::{Checkbox, Container, Float, Scrollable, Text};
 
-use crate::gui::*;
+use crate::ui::gui::*;
 use super::ModalInfo;
 
 #[derive(Clone, Debug)]

@@ -11,7 +11,11 @@ use iced::{
 };
 
 #[derive(Clone)]
-pub enum SettingsEvent {}
+pub enum SettingsMessage {}
+
+pub struct Modal {
+
+}
 
 pub struct SettingsState {}
 
@@ -20,11 +24,11 @@ impl SettingsState {
         SettingsState {  }
     }
 
-    pub fn update(&mut self, event: SettingsEvent) {
+    pub fn update(&mut self, message: SettingsMessage) {
 
     }
 
-    pub fn view(&self) -> Element<'_, SettingsEvent> {
+    pub fn view(&self) -> Element<'_, SettingsMessage> {
         Text::new("Settings").into()
     }
 }

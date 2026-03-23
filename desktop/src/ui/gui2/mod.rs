@@ -1,40 +1,61 @@
 // Modules
+pub mod modal;
+
 mod block;
 mod settings;
 
 // Dependencies
 use iced::{
     self,
-    advanced::Widget,
+    Color,
     Element,
     Length,
-    Vector,
+    Task,
     widget::{
         Button,
         Column,
+        center,
         Container,
         container,
-        Float,
+        float,
+        mouse_area,
+        opaque,
         Row,
+        Space,
+        stack,
         Text,
     },
 };
 use screen_size as f_screen_size;
 
 // Local
-use block::{BlockEvent, BlockState};
-use settings::{SettingsEvent, SettingsState};
+use block::{BlockState};
+use settings::{SettingsMessage, SettingsState};
 
 #[derive(Clone)]
-enum Route<T> {
-    Forward(T),
-    Open,
+enum Route<F, O = ()> {
+    Forward(F),
+    Open(O),
+}
+
+impl<F, O> Route<F, O> {
+    fn handle_route<T>(
+        self,
+        forward: impl FnOnce(F) -> T,
+        open: impl FnOnce(O) -> T
+    ) -> T 
+    {
+        match self {
+            Route::Forward(msg) => forward(msg),
+            Route::Open(msg) => open(msg)
+        } 
+    }
 }
 
 #[derive(Clone)]
-enum Event {
-    Block(Route<BlockEvent>),
-    Settings(Route<SettingsEvent>),
+enum Message {
+    Block(Route<block::Message>),
+    Settings(Route<SettingsMessage>),
 }
 
 enum Screen {
@@ -44,6 +65,7 @@ enum Screen {
 
 struct State {
     screen: Screen,
+    modal: bool,
     block: BlockState,
     settings: SettingsState,
 }
@@ -51,52 +73,50 @@ struct State {
 impl State {
     fn new() -> Self {
         let screen = Screen::Block;
+        let modal = false;
         let block = BlockState::new();
         let settings = SettingsState::new();
   
         State { 
             screen, 
+            modal,
             block, 
             settings,
         }
     }
 
-    fn update(&mut self, event: Event) {
-        match event {
-            Event::Block(route) => {
-                match route {
-                    Route::Forward(event) => self.block.update(event),
-                    Route::Open => self.screen = Screen::Block,
-                }
+    fn update(&mut self, message: Message) {
+        match message {
+            Message::Block(route) => {
+                let forward = |msg| {
+                    let action = self.block.update(msg);
+
+                    match action {
+                        block::Action::None => (),
+                        block::Action::CloseModal => { self.modal = false; },
+                        block::Action::OpenModal => { self.modal = true; },                       
+                    };
+                };
+
+                route.handle_route(
+                    forward, 
+                    |_| self.screen = Screen::Block
+                );
             },
-            Event::Settings(route) => {
-                match route {
-                    Route::Forward(event) => self.settings.update(event),
-                    Route::Open => self.screen = Screen::Settings,
-                }
-            }
-        };
+            Message::Settings(route) => {
+                route.handle_route(
+                    |msg| self.settings.update(msg), 
+                    |_| self.screen = Screen::Settings
+                );
+            },
+        }
     }
 
-    fn view(&self) -> Element<'_, Event> {
-        let block = 
-            Button::new(
-                Text::new("Block").center()
-            )
-            .on_press(Event::Block(Route::Open))
-            .width(Length::Fill)
-            .height(Length::Fill);
+    fn view(&self) -> Element<'_, Message> {
+        let block = navigation_button("Block", Message::Block(Route::Open(())));
 
-        let settings = 
-            Button::new(
-                Text::new("Settings").center()
-            )
-            .on_press(Event::Settings(Route::Open))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(0);
+        let settings = navigation_button("Settings", Message::Settings(Route::Open(())));
             
-
         let (_, screen_height) = screen_size();
 
         let bottom_row = 
@@ -105,14 +125,11 @@ impl State {
                 settings.into()
             ])
             .width(Length::Fill)
-            .height(screen_height / 20);
+            .height(screen_height / 20); 
 
         let current_screen = 
             Container::new(
-                match &self.screen {
-                    Screen::Block => self.block.view().map(|event| Event::Block(Route::Forward(event))),
-                    Screen::Settings => self.settings.view().map(|event| Event::Settings(Route::Forward(event))) 
-                }
+                self.view_delegation()
             )
             .width(Length::Fill)
             .height(Length::Fill);
@@ -126,68 +143,79 @@ impl State {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        window_content.into()
-    }
-}
-
-trait Modal<'a, E> 
-where
-    E: Clone + 'static 
-{
-    fn create_modal(self, exit_modal_event: E) -> Float<'a, E>;
-}
-
-impl<'a, E, W> Modal<'a, E> for W
-where
-    E: Clone + 'static,
-    W: Into<Element<'a, E>> + Widget<E, iced::Theme, iced::Renderer>
-{
-    fn create_modal(self, exit_modal_event: E) -> Float<'a, E> {
-        let (screen_width, screen_height) = screen_size();
-        let (width, height) = (screen_width / 3, screen_height / 2);
-
-        let title_bar = {
-            Container::new(
-                Button::new(
-                    Text::new("✕").center()
-                )
-                .on_press(exit_modal_event)
-            )
-            .align_right(Length::Fill)
-            .center_y(height / 15)
-            .style(|_| {
-                container::background(iced::Color::from_rgb(0.0, 0.0, 0.0))
-            })
-        };
-
-        {
-            let iced::Size { width, height } = self.size();
-
-            assert!(
-                (width, height) == (Length::Fill, Length::Fill),
-                "the main modal component size must be {:?}", Length::Fill
-            );
+        if self.modal {
+            let modal_content = self.view_delegation();
+            construct_modal(window_content, modal_content)               
+        } else {
+            window_content.into()
         }
-
-        let content = {
-            Column::with_children([
-                title_bar.into(),
-                self.into(),
-            ])
-            .width(width)
-            .height(height)
-        };
-
-        let modal = Float::new(content)
-            .translate(|content, viewport| {
-                Vector {
-                    x: (viewport.width - content.width) / 2.0,
-                    y: (viewport.height - content.height) / 2.0
-                }
-            });
-
-        modal
     }
+
+    fn view_delegation(&self) -> Element<'_, Message> {
+        match &self.screen {
+            Screen::Block => self.block
+                .view()
+                .map(|message| Message::Block(Route::Forward(message))),
+            Screen::Settings => self.settings
+                .view()
+                .map(|message| Message::Settings(Route::Forward(message))),
+            _ => unreachable!()
+        }
+    }
+}
+
+fn button_with_text<'a, M>(text_str: &'a str, message: M) -> Element<'a, M> 
+where
+    M: Clone + 'static
+{
+    let text = Text::new(text_str);
+    let button = Button::new(text)
+        .on_press(message);
+
+    button.into()
+}
+
+#[derive(Clone)]
+enum ModalRoute<O> {
+    Ongoing(O),
+    Close,
+}
+
+fn navigation_button(text_str: &'static str, msg: Message) -> Button<'_, Message> {
+    Button::new(
+        Text::new(text_str).center()
+    )
+    .on_press(msg)
+    .width(Length::Fill)
+    .height(Length::Fill)
+}
+
+fn construct_modal<'a, Message>(
+    base: impl Into<Element<'a, Message>>,
+    content: impl Into<Element<'a, Message>>
+) -> Element<'a, Message> 
+where
+    Message: 'a + Clone
+{
+    let (screen_width, screen_height) = screen_size();
+    let (width, height) = (screen_width / 3, screen_height / 2);
+
+    let modal = opaque(
+        mouse_area(
+            center(
+                opaque(
+                    container(content)
+                    .center_x(width)
+                    .center_y(height)
+                )
+            )
+            .style(|_theme|  {
+                container::background(Color { a: 0.8, ..Color::BLACK})
+            }),
+        )
+    );
+
+    stack![base.into(), modal].into()
 }
 
 pub fn run() -> iced::Result {

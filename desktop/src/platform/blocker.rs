@@ -44,24 +44,6 @@ pub fn run(mut receiver: Receiver<Request<BlockerMessage, BlockerReply>>) {
     });
 }
 
-fn scan_and_kill_process(system: &mut System, apps: &HashSet<String>) {
-    let names: Vec<&OsStr> = apps
-        .iter()
-        .map(|app| app.as_ref())
-        .collect();
-
-    for name in names
-    {
-        system.refresh_processes(ProcessesToUpdate::All, true);
-        let mut blocked_processes = system.processes_by_name(name);
-
-        while let Some(p) = blocked_processes.next() 
-        {
-            p.kill();
-        }        
-    }
-} 
-
 fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
     match req.data {
         BlockerMessage::Block(app) => {
@@ -104,6 +86,25 @@ fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<St
 
     req.replier.send(BlockerReply::Outcome(Ok(()))).unwrap();
 }
+
+fn scan_and_kill_process(system: &mut System, apps: &HashSet<String>) {
+    let names: Vec<&OsStr> = apps
+        .iter()
+        .map(|app| app.as_ref())
+        .collect();
+
+    for name in names
+    {
+        system.refresh_processes(ProcessesToUpdate::All, true);
+        let mut blocked_processes = system.processes_by_name(name);
+
+        while let Some(p) = blocked_processes.next() 
+        {
+            p.kill();
+        }        
+    }
+} 
+
 
 fn handle_req2(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
     if let BlockerMessage::GetInfo = req.data {

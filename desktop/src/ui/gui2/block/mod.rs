@@ -1,173 +1,239 @@
-mod new_group;
+// mod block_rules;
+mod manage_guigroup;
+mod guigroup;
 
-// Dependencies
+// Dependencies (alphabetical order)
 use iced::{
     self,
-    alignment::Horizontal,
+    alignment::{
+        Horizontal::*,
+    },
+    Color,
     Element,
-    Length,
+    Length::*,
     widget::{
         Button,
         Column,
         Container,
         Row,
+        Scrollable,
         Space,
-        Stack,
         Text,
-    }
+    },
 };
 
 // Local
-use crate::gui2::Route;
-use crate::platform::App;
-use new_group::{NewGroupEvent, NewGroupState, OptionNewGroupState};
+use crate::{
+    unwrap_variant,
+    platform::{
+        App, 
+        Blocker,
+    },
+    ui::gui2::{
+        Route, 
+    },
+};
 
 #[derive(Clone)]
-pub enum BlockEvent {
-    NewGroup(Route<NewGroupEvent>),
+pub enum Message {
+    NewGUIGroup(Route<manage_guigroup::Message>),
+    GUIGroup(usize, guigroup::Message),
 }
 
-struct Group {
-    inner: Vec<App>,
+pub enum Action {
+    None,
+    CloseModal,
+    OpenModal,
 }
 
-impl Group {
-    fn new() -> Self {
-        let inner = Vec::new();
-
-        Group { inner }
-    }
+pub enum Modal {
+    GUIGroup(usize, guigroup::Modal),
+    NewGUIGroup(manage_guigroup::ManageGroup)
 }
 
 pub struct BlockState {
-    groups: Vec<Group>,
-    option_new_group: Option<NewGroupState>,
+    modal: Option<Modal>,
+    guigroups: Vec<guigroup::GUIGroup>,
+    blocker: Blocker,
 }
 
 impl BlockState {
     pub fn new() -> Self {
-        let groups = Vec::new();
-        let option_new_group = None;
-
         BlockState { 
-            groups, 
-            option_new_group 
+            modal: None,
+            guigroups: Vec::new(),
+            blocker: Blocker::new(), 
         }
     }
 
-    pub fn update(&mut self, event: BlockEvent) {
-        match event {
-            BlockEvent::NewGroup(route) => {
-                match route {
-                    Route::Forward(event) => self.option_new_group.update(event),
-                    Route::Open =>{
-                        if self.option_new_group.is_none() {
-                            self.option_new_group = OptionNewGroupState::new();
+    pub fn update(&mut self, message: Message) -> Action {
+        match message {
+            Message::NewGUIGroup(route) => {
+                match (&mut self.modal, route) {
+                    (Some(Modal::NewGUIGroup(new_guigroup)), Route::Forward(msg)) => {
+                        let action = new_guigroup.update(msg);
+
+                        match action {
+                            manage_guigroup::Action::None => Action::None,
+                            manage_guigroup::Action::Close => {
+                                self.modal = None;
+                                Action::CloseModal
+                            },
+                            manage_guigroup::Action::Save => {
+                                let modal = self.modal
+                                    .take()
+                                    .unwrap();
+
+                                let new_guigroup = unwrap_variant!(modal, Modal::NewGUIGroup);
+                                
+                                let (name, apps) = new_guigroup.into_name_and_apps();
+                                let apps = apps
+                                    .into_iter()
+                                    .collect();
+
+                                let group = crate::core::block_config::Group::new_with(apps);
+                                let blocker = self.blocker.clone();
+
+                                let guigroup = guigroup::GUIGroup::from((name, group, blocker));
+
+                                self.guigroups.push(guigroup);
+
+                                Action::CloseModal
+                            },
                         }
-                    } 
+                    },
+                    (None, Route::Open(())) => {
+                        let new_guigroup = manage_guigroup::ManageGroup::new();
+                        self.modal = Some(Modal::NewGUIGroup(new_guigroup));
+
+                        Action::OpenModal
+                    },
+                    _ => unreachable!()
                 }
+            }
+
+            Message::GUIGroup(i, msg) => {
+                let guigroups = &mut self.guigroups;
+
+                let action = guigroups[i].update(msg);
+
+                match action {
+                    guigroup::Action::None => Action::None,
+                    guigroup::Action::Delete => {
+                        guigroups.remove(i); 
+                        
+                        Action::None
+                    },
+                    guigroup::Action::CloseModal => Action::CloseModal,
+                    guigroup::Action::OpenModal => Action::OpenModal,
+                };
+
+                Action::None
             }
         }
     }   
 
-    pub fn view(&self) -> Element<'_, BlockEvent> {
+    pub fn view(&self) -> Element<'_, Message> {
+        if let Some(m) = &self.modal {
+            return self.modal(m);
+        }
         let first_row = self.first_row();
-        let group_list = self.group_list();
+        let guigroup_list = self.guigroup_list();
 
         let column = 
             Column::with_children([
-                first_row.into(),
-                group_list.into()
+                first_row,
+                guigroup_list
             ])
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(Horizontal::Center);
+            .width(Fill)
+            .height(Fill)
+            .align_x(Center)
+            .spacing(20);
 
-        let stack_base = 
-            Stack::with_children([
-                column.into()
-            ]);
+        column.into()
+    }
+    fn modal<'a>(&'a self, modal: &'a Modal) -> Element<'a, Message> {
+        match modal {
+            Modal::GUIGroup(i, m) => {
+                let i = *i;
 
-        if self.option_new_group.is_some() {
-            let new_group_view = self.option_new_group
-                .view()
-                .map(|event| BlockEvent::NewGroup(Route::Forward(event)));
-
-            let stack = stack_base.push(new_group_view);
-
-            return stack.into();
-        }
-
-        stack_base.into()
-
-        /* 
-
-        let stack = {
-            let base = Stack::with_children([
-                column.into()
-            ]);
-
-            if self.new_group.is_some() {
-                let new_group = self.new_group
+                self.guigroups[i]
                     .view()
-                    .map(|event| BlockEvent::NewGroup(Route::Forward(event)));
-
-                base.push(new_group)
-            } else {
-                base
-            }
-        };
-            
-        stack.into()
-
-        */
+                    .map(move |msg| Message::GUIGroup(i, msg))
+            },
+            Modal::NewGUIGroup(new_guigroup) => new_guigroup
+                .view()
+                .map(|msg| Message::NewGUIGroup(Route::Forward(msg)))
+        }
     }
 
-    fn first_row(&self) -> Container<'_, BlockEvent> {
+
+    fn first_row(&self) -> Element<'_, Message> {
         let (_, screen_height) = crate::gui2::screen_size();
 
         let title = 
             Container::new(
                 Text::new("App Blocks")
+                .size(25)
             )
-            .center_x(Length::FillPortion(1))
-            .center_y(Length::Fill);
+            .center_x(FillPortion(3))
+            .center_y(Fill);
 
-        let new_group_button = 
+        let new_guigroup_button = 
             Container::new(
                 Button::new(
                     Text::new("New Group")
+                    .size(15)
                 )
-                .on_press(BlockEvent::NewGroup(Route::Open))
+                .on_press(Message::NewGUIGroup(Route::Open(())))
             )
-            .center_x(Length::FillPortion(1))
-            .center_y(Length::Fill);
+            .center_x(FillPortion(2))
+            .center_y(Fill);
 
         let space = Space::new()
-            .width(Length::FillPortion(5));
+            .width(FillPortion(8));
 
         let first_row = 
             Container::new(
                 Row::with_children([
                     title.into(), 
                     space.into(),
-                    new_group_button.into()
+                    new_guigroup_button.into()
                 ])
             )
-            .center_x(Length::Fill)
-            .center_y(screen_height / 15);
+            .center_x(Fill)
+            .center_y(screen_height / 14);
 
-        first_row
+        first_row.into()
     }
 
-    fn group_list(&self) -> Container<'_, BlockEvent> {
-        if self.groups.is_empty() { 
-            Container::new(
+    fn guigroup_list(&self) -> Element<'_, Message> {
+        if self.guigroups.is_empty() { 
+            return Container::new(
                 Text::new("No groups currently exist")
             )
-            .center(Length::Fill)
-        } else {
-            todo!()
+            .center(Fill)
+            .into()
         }
-    }
+
+        let guigroups_element: Vec<_> = self.guigroups
+            .iter()
+            .enumerate()
+            .map(|(i, guigroup)| {
+                guigroup.view().map(move |msg| Message::GUIGroup(i, msg))
+            })
+            .collect();
+
+        let guigroup_list = 
+            Column::with_children(
+                guigroups_element
+            )
+            .width(Fill)
+            .align_x(Center)
+            .spacing(10);
+
+        Scrollable::new(guigroup_list)
+            .spacing(0)
+            .into()
+    }    
 }

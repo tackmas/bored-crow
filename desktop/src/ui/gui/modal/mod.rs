@@ -51,7 +51,7 @@ impl ModalKind {
     }
 
     pub fn view(&self) -> Element<'_, ModalMsg> {
-        let (screen_width, screen_height) = crate::gui::screen_size();
+        let (screen_width, screen_height) = crate::ui::gui::screen_size();
         let (width, height) = (screen_width / 3, screen_height / 2);
 
         let info = ModalInfo { width, height };

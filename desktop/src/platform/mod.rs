@@ -1,3 +1,12 @@
+use std::{
+    sync::{
+        Arc,
+        atomic::{
+            AtomicU32,
+        },
+    }
+};
+
 use anyhow::Result;
 use tokio::{
     sync::{mpsc, oneshot}
@@ -50,6 +59,7 @@ impl From<String> for App {
     }
 }
 
+#[derive(Clone)]
 pub struct Blocker {
     sender: mpsc::Sender<Request<BlockerMessage, BlockerReply>>
 }
@@ -69,12 +79,26 @@ impl Blocker {
 
         response.outcome_inner()
     }
+    pub fn block_vec(&self, apps: &Vec<App>) -> Result<(), String> {
+        for app in apps {
+            self.block(app)?
+        }
+
+        Ok(())
+    }
     pub fn unblock(&self, app: &App) -> Result<(), String> {
         let msg = BlockerMessage::Unblock(app.clone());
 
         let response = self.blocker_request(msg);
 
         response.outcome_inner()
+    }
+    pub fn unblock_vec(&self, apps: &Vec<App>) -> Result<(), String> {
+        for app in apps {
+            self.unblock(app)?
+        }
+        
+        Ok(())
     }
 
     pub fn list_blocked(&self) -> Vec<App> {
@@ -127,3 +151,28 @@ impl BlockerReply {
 }
 
 
+pub struct BlockedApps {
+    apps_quantity: usize,
+    apps_is_blocked: Arc<Vec<AtomicU32>>
+}
+
+impl BlockedApps {
+    pub fn new() -> Self {
+        let apps_quantity = App::all_apps()
+            .unwrap()
+            .len();
+
+        let len = (apps_quantity / 32) + 1;
+        let vec = (0..len)
+            .into_iter()
+            .map(|_| AtomicU32::new(0))
+            .collect();
+
+        let apps_is_blocked = Arc::new(vec);
+
+        BlockedApps { 
+            apps_quantity,
+            apps_is_blocked
+        }
+    }
+}

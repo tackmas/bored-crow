@@ -1,16 +1,15 @@
 use std::thread;
 use std::time::Duration;
 
-use iced;
 use tokio::runtime::Runtime;
 
-mod platform;
-mod ui;
-
-use ui::gui;
-use ui::gui2;
-
-
+use desktop::{
+    ui::{
+        self,
+        gui2
+    },
+    platform
+};
 
 fn main() {
     let runtime = Runtime::new().unwrap();
