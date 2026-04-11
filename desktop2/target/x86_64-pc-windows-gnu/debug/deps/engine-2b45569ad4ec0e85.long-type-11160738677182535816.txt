@@ -1,3 +1,0 @@
-(Arc<[App]>, FilterMap<std::vec::IntoIter<std::string::String>, {closure@engine/src/state.rs:63:25: 63:31}>)
-Group: From<(Arc<[App]>, FilterMap<std::vec::IntoIter<std::string::String>, {closure@engine/src/state.rs:63:25: 63:31}>)>
-FilterMap<std::vec::IntoIter<std::string::String>, {closure@engine/src/state.rs:63:25: 63:31}>

@@ -1,8 +1,0 @@
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-unknown-linux-gnu/debug/deps/wayland_client-54f0ff449961c0ad.d: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/conn.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/event_queue.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/globals.rs
-
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-unknown-linux-gnu/debug/deps/libwayland_client-54f0ff449961c0ad.rmeta: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/conn.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/event_queue.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/globals.rs
-
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/lib.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/conn.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/event_queue.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-client-0.31.13/src/globals.rs:

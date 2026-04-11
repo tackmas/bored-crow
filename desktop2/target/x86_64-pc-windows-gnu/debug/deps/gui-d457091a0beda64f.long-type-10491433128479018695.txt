@@ -1,2 +1,0 @@
-for<'a> fn(&'a iced_gui::State) -> iced::advanced::iced_graphics::iced_core::Element<'a, iced_gui::Message, Theme, iced_renderer::fallback::Renderer<iced_wgpu::Renderer, iced_tiny_skia::Renderer>> {iced_gui::State::view}
-for<'a> iced::application::ViewFn<'a, impl std::future::Future<Output = {type error}>, _, _, _>

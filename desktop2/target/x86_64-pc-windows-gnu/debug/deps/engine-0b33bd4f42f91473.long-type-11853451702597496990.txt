@@ -1,1 +1,0 @@
-std::iter::Map<Enumerate<std::slice::Iter<'_, App>>, {closure@engine/src/state.rs:58:18: 58:28}>

@@ -1,1 +1,0 @@
-std::iter::Map<std::slice::Iter<'_, usize>, {closure@engine/src/block_config/mod.rs:88:18: 88:21}>

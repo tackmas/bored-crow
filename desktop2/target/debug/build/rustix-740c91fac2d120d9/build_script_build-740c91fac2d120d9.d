@@ -1,5 +1,0 @@
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/debug/build/rustix-740c91fac2d120d9/build_script_build-740c91fac2d120d9.d: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-0.38.44/build.rs
-
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/debug/build/rustix-740c91fac2d120d9/build_script_build-740c91fac2d120d9: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-0.38.44/build.rs
-
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-0.38.44/build.rs:

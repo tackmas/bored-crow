@@ -1,8 +1,0 @@
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-unknown-linux-gnu/debug/deps/smithay_clipboard-232e686c23e091aa.d: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/mime.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/state.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/worker.rs
-
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-unknown-linux-gnu/debug/deps/libsmithay_clipboard-232e686c23e091aa.rmeta: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/mime.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/state.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/worker.rs
-
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/lib.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/mime.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/state.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/smithay-clipboard-0.7.3/src/worker.rs:

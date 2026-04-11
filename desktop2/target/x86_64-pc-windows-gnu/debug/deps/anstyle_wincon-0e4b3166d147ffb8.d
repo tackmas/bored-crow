@@ -1,8 +1,0 @@
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-pc-windows-gnu/debug/deps/anstyle_wincon-0e4b3166d147ffb8.d: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/ansi.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/stream.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/windows.rs
-
-/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-pc-windows-gnu/debug/deps/libanstyle_wincon-0e4b3166d147ffb8.rmeta: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/ansi.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/stream.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/windows.rs
-
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/lib.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/ansi.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/stream.rs:
-/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.11/src/windows.rs:
