@@ -1,0 +1,6 @@
+/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-pc-windows-gnu/debug/deps/unicode_ident-5761a8516761c540.d: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24/src/tables.rs
+
+/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/x86_64-pc-windows-gnu/debug/deps/libunicode_ident-5761a8516761c540.rmeta: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24/src/lib.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24/src/tables.rs
+
+/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24/src/lib.rs:
+/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/unicode-ident-1.0.24/src/tables.rs:

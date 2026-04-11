@@ -1,0 +1,3 @@
+(Arc<[App]>, std::iter::Map<std::vec::IntoIter<std::string::String>, {closure@engine/src/state.rs:63:18: 63:24}>)
+Group: From<(Arc<[App]>, std::iter::Map<std::vec::IntoIter<std::string::String>, {closure@engine/src/state.rs:63:18: 63:24}>)>
+std::iter::Map<std::vec::IntoIter<std::string::String>, {closure@engine/src/state.rs:63:18: 63:24}>

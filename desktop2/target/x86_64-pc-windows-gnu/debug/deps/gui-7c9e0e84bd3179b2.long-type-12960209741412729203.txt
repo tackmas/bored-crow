@@ -1,0 +1,1 @@
+for<'a> fn(&'a mut iced_gui::State, iced_gui::Message) -> iced::Task<iced_gui::Message> {iced_gui::State::update}

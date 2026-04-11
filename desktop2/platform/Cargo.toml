@@ -1,0 +1,17 @@
+[package]
+name = "platform"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+sysinfo = "0.37.2"
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
+applications = "0.3.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+app-finder = "=0.1.0"
+installed = "0.1.0"
+winreg = "0.55.0"

@@ -1,0 +1,9 @@
+/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/debug/build/crossbeam-utils-a996fdcac5514880/build_script_build-a996fdcac5514880.d: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/build.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/no_atomic.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/build-common.rs
+
+/home/tackmas/Developer/Projects/Bored_Crow/desktop2/target/debug/build/crossbeam-utils-a996fdcac5514880/build_script_build-a996fdcac5514880: /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/build.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/no_atomic.rs /home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/build-common.rs
+
+/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/build.rs:
+/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/no_atomic.rs:
+/home/tackmas/Developer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crossbeam-utils-0.8.21/build-common.rs:
+
+# env-dep:CARGO_PKG_NAME=crossbeam-utils

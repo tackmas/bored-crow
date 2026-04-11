@@ -1,0 +1,1 @@
+std::iter::Map<std::vec::IntoIter<guigroup::Saved>, {closure@gui/src/iced_gui/block/mod.rs:94:18: 94:21}>
