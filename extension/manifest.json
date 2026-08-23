@@ -1,0 +1,13 @@
+  {
+	  "manifest_version": 3,
+	  "name": "The First",
+	  "version": "1.0.0",
+	  "description": "The First",
+	  
+	  "permissions": ["tabs"],
+
+	  "background": {
+	    "service_worker": "background.js",
+		"type": "module"
+	  }
+  }
