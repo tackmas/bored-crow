@@ -6,17 +6,22 @@ use crate::{decrease_prohibit_uninstall_count, increase_prohibit_uninstall_count
 use crate::platform::{App, Blocker};
 
 use super::id::{AsId, Id};
-use super::{time_range::WeekdayRuleMode, timer::Timer};
+use super::timer::Timer;
+use super::time_range::{CustomWeek, UniformWeekdays, WeekSchedule};
 
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum BlockRuleKind {
+    // Timer
     Timer { timer: Timer, lock_when_blocked: LockWhenBlocked },
-    TimeRange(WeekdayRuleMode, LockConfig),
+    // Time range
+    CustomWeekSchedule(WeekSchedule<CustomWeek>, LockConfig),
+    UniformWeekSchedule(WeekSchedule<UniformWeekdays>, LockConfig)
 }
 
+
 #[derive(Clone)]
-pub struct BlockConfig {
+pub struct BlockConfig{
     pub id: Id,
     pub kind: BlockRuleKind,
 }

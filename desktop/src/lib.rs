@@ -2,7 +2,7 @@ pub mod core;
 pub mod gui;
 pub mod ipc;
 pub mod platform;
-pub mod utils;
+pub mod macros;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -29,14 +29,3 @@ pub fn decrease_prohibit_uninstall_count() {
     println!("Decreased prohibit uninstall count. New value: {}", old - 1)
 }
 
-fn lol(lol: &mut String) {
-    aa(lol);
-
-    lol.push_str("aa");
-} 
-
-
-
-fn aa(lol: &mut String) {
-    lol.push_str("a")
-}

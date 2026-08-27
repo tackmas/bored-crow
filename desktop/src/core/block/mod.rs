@@ -26,7 +26,7 @@ use self::id::{AsId, Id};
 
 use timer::Timer;
 
-use time_range::WeekdayRuleMode;
+use time_range::WeekScheduleT;
 
 pub struct Unblocker {
     unblock_tx: oneshot::Sender<()>,
@@ -164,10 +164,11 @@ impl Group {
             BlockRuleKind::Timer { timer, lock_when_blocked } => {
                 self.block_with_timer(timer, lock_when_blocked, cbi).await;
             },
-            BlockRuleKind::TimeRange(weekday_rule_mode, lock_config) => {
-                let lock_when_blocked = self.lock_when_blocked(lock_config, &cbi.blocker);
-
-                self.block_with_time_range(weekday_rule_mode, lock_when_blocked, cbi).await;
+            BlockRuleKind::CustomWeekSchedule(week_schedule, lock_config) => {
+                self.block_with_time_range(week_schedule, lock_config, cbi).await
+            }
+            BlockRuleKind::UniformWeekSchedule(week_schedule, lock_config) => {
+                self.block_with_time_range(week_schedule, lock_config, cbi).await;
             }
         };
     }

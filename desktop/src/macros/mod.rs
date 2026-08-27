@@ -1,3 +1,24 @@
+#[macro_export]
+macro_rules! wrapper_with_deref {
+    ($wrapper_type_name:ident, $wrapped_type:ty) => {
+        pub struct $wrapper_type_name($wrapped_type);
+
+        impl std::ops::Deref for $wrapper_type_name {
+            type Target = $wrapped_type;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+        
+        impl std::ops::DerefMut for $wrapper_type_name {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+    };
+}
+
 macro_rules! inner {
     ($($inner:expr),*) => {
         inner
@@ -28,3 +49,5 @@ macro_rules! is_variant {
 macro_rules! match_into_closure {
     ($(self:expr),+, $($variant:path),+) => {};
 }
+
+

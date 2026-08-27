@@ -114,15 +114,3 @@ impl Group {
         }
     }
 }
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ub_check() {
-
-
-    }
-}

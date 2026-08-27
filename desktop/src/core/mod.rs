@@ -1,3 +1,3 @@
 pub mod block;
-pub mod local_clock;
+pub mod clock;
 pub mod settings;

@@ -1,3 +1,11 @@
+/*  
+    This binary deregisters, registers, starts and configures the service behind the daemon. 
+    It is supposed to be run when the service has been compromised, such as terminating the service. 
+    This binary is to be run by the daemon when it recieves a signal to shutdown, 
+    which is possible if the user stops the service.
+*/
+
+
 use std::env::current_exe;
 use std::ffi::OsStr;
 use std::io;
@@ -8,6 +16,8 @@ use std::thread;
 fn main() {
     thread::sleep(Duration::from_secs(2));
 
+    // The compiled binary `restarter.exe` of this binary 
+    // source code must be in the same directory as `daemon.exe`
     let daemon_exe_path = {
         let mut current_exe_path = current_exe().unwrap();
         current_exe_path.pop();
@@ -16,7 +26,7 @@ fn main() {
     };
 
     let run_daemon_with_arg = |arg: &str| {
-        process_with_args(&daemon_exe_path, [arg]).unwrap();
+        run_process_with_args(&daemon_exe_path, [arg]).unwrap();
     };
 
     run_daemon_with_arg("deregister-service");
@@ -29,7 +39,7 @@ fn main() {
                 .into_iter()
                 .chain(args.iter().copied());
 
-            process_with_args("sc", args)
+            run_process_with_args("sc", args)
         };
 
         sc_with_args("start", &[]).unwrap();
@@ -38,7 +48,7 @@ fn main() {
 
 }
 
-fn process_with_args<'a>(
+fn run_process_with_args<'a>(
     process: impl AsRef<OsStr>, 
     args: impl IntoIterator<Item = &'a str>
 ) -> io::Result<()> 
@@ -49,3 +59,4 @@ fn process_with_args<'a>(
 
     Ok(())
 }
+

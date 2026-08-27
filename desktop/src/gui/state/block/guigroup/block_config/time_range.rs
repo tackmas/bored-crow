@@ -1,8 +1,7 @@
 use std::fmt;
-use std::num::IntErrorKind;
-use std::str::Utf8Error;
+use std::ops::{Index, IndexMut};
 
-use chrono::{NaiveTime, Timelike, Weekday, WeekdaySet};
+use chrono::{Local, NaiveTime, Timelike, Weekday, WeekdaySet};
 
 use iced::{Background, Color, Element, Length, Padding};
 use iced::advanced::Widget;
@@ -22,7 +21,10 @@ use iced::widget::{
 };
 
 use crate::make_semi_transparent;
-use crate::core::block::time_range::{self, CustomWeekday, CustomWeekdays, UniformWeekdays, WeekdayRuleMode};
+use crate::core::block::block_rule::{BlockRuleKind, LockConfig};
+use crate::core::block::time_range::{
+    self, CustomWeek, TimeRange, TimeRangesOnWeek, UniformWeekdays, WeekSchedule, WeekScheduleT
+};
 use crate::gui::state::grid::Grid;
 use crate::gui::state::{bold_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
 use crate::gui::state::modal::{horizontal_seperator, horizontal_seperator2, radio_with_border, title};
@@ -78,23 +80,17 @@ pub enum Message {
     InvalidInput(String),
 }
 
-pub struct State {
+pub struct GUITimeRange {
     mode: Mode,
-    uniform: UniformWeekdays,
-    custom: CustomWeekdays,
+    uniform: GUIUniformWeek,
+    custom: GUICustomWeek,
 }
 
 // Constructor
-impl State {
+impl GUITimeRange {
     pub fn new() -> Self {
-        let uniform = {
-            UniformWeekdays {
-                time_range: time_range::TimeRange::min(),
-                weekdays: WeekdaySet::single(Weekday::Mon),
-            }
-        };
-
-        let custom = CustomWeekdays::default();
+        let uniform = GUIUniformWeek::default();
+        let custom = GUICustomWeek::default();
 
         Self {
             mode: Mode::Uniform,
@@ -105,7 +101,7 @@ impl State {
 }
 
 // Update
-impl State {
+impl GUITimeRange {
     pub fn update(&mut self, message: Message) {
         match message {
             Message::ModeSelected(mode) => self.mode = mode,
@@ -114,8 +110,8 @@ impl State {
             },
             
             Message::TimeInputCustom(weekday, bound, field, input) => {
-                let time_range = self.custom[weekday]
-                    .enabled_time_range_mut()
+                let time_range = self.custom
+                    .time_range_on_weekday_mut(weekday)
                     .expect("Should always be Some(...) if user is able to input");
 
                 change_time_range(time_range, bound, field, input);
@@ -132,7 +128,7 @@ impl State {
     fn toggle_weekday(&mut self, weekday: Weekday, flag: bool) -> Result<(), &'static str> {
         match self.mode {
             Mode::Uniform => {
-                let weekdays = &mut self.uniform.weekdays;
+                let weekdays = &mut self.uniform.enabled_weekdays;
 
                 let is_single_day = weekdays.single_day().is_some();
 
@@ -149,10 +145,8 @@ impl State {
                 Ok(())
             }
             Mode::Custom => {
-                let custom_weekday = &mut self.custom[weekday];
+                self.custom.toggle_weekday(weekday, flag);
 
-                custom_weekday.enabled = flag;
-                
                 Ok(())
             }
         }
@@ -170,26 +164,26 @@ fn change_time_range(
     let input = input.into();
 
     match bound {
-        Bound::Start => change_clock(&mut time_range.start.time(), field, input),
-        Bound::End => change_clock(&mut time_range.end.time(), field, input),
+        Bound::Start => change_clock(&mut time_range.start, field, input),
+        Bound::End => change_clock(&mut time_range.end, field, input),
     }
 }
 
-fn change_clock(time: &mut NaiveTime, field: Field, input: u32) {
+fn change_clock(clock: &mut NaiveTime, field: Field, input: u32) {
     match field {
         Field::Hour => {
-            *time = NaiveTime::from_hms_opt(input, time.minute(), 0)
-                .expect("Input (hour) should always be valid from earlier error handling");
+            *clock = NaiveTime::from_hms_opt(input, clock.minute(), 0)
+                .expect("`clock` is NaiveTime, so it can't have an invalid value. `input` should be 0 <= `input` < 24 from earlier checks")
         }
         Field::Minute => {
-            *time = NaiveTime::from_hms_opt(time.hour(), input, 0)
-                .expect("Input (minute) should always be valid from earlier error handling")
+            *clock = NaiveTime::from_hms_opt(clock.hour(), input, 0)
+                .expect("`clock` is NaiveTime, so it can't have an invalid value. `input` should be 0 <= `input` < 60 from earlier checks")
         }
     }
 }
 
 // View
-impl State {
+impl GUITimeRange {
     pub fn view(&self) -> Element<'_, Message> {
         let mode_selection = self.mode_selection()
             .width(Length::Fill)
@@ -237,7 +231,7 @@ wheras Uniform Mode has the same time range on all days",
 
     fn uniform_mode(&self) -> Element<'_, Message> {
         let weekday_elements = weekdays(|weekday| {
-            let is_toggled = self.uniform.weekdays.contains(weekday);
+            let is_toggled = self.uniform.enabled_weekdays.contains(weekday);
             weekday_checkbox(weekday, is_toggled)
                 .into()
         });
@@ -264,6 +258,7 @@ wheras Uniform Mode has the same time range on all days",
         .into()
     }
 
+    /* 
     fn custom_mode(&self) -> Element<'_, Message> {
         let mut weekday_elements = column![];
 
@@ -307,6 +302,7 @@ wheras Uniform Mode has the same time range on all days",
             .into()
     }
 
+    */
     fn custom_mode2(&self) -> Element<'_, Message> {
         let padding = Padding::ZERO.right(*LENGTH_UNIT);
 
@@ -324,8 +320,7 @@ wheras Uniform Mode has the same time range on all days",
         grid.align_row(0, Vertical::Center);
 
         for (i, weekday) in WeekdaySet::ALL.iter(Weekday::Mon).enumerate() {
-            let custom_weekday = &self.custom[weekday];
-            let is_toggled = custom_weekday.enabled;
+            let is_toggled = self.custom.is_weekday_enabled(weekday);
 
             let weekday_checkbox = weekday_checkbox(weekday, is_toggled)
                 .align_y(Vertical::Center)
@@ -336,10 +331,12 @@ wheras Uniform Mode has the same time range on all days",
                 Message::TimeInputCustom(weekday, bound, field, input)
             };
 
-            let [mut start, mut hyphen_seperator, mut end] = 
-                time_range_pick_list2(&custom_weekday.time_range, on_selected);
+            let time_range = self.custom.time_range_on_weekday(weekday);
 
-            if !custom_weekday.enabled {
+            let [mut start, mut hyphen_seperator, mut end] = 
+                time_range_pick_list2(time_range, on_selected);
+
+            if !is_toggled {
                 (start, hyphen_seperator, end) = make_semi_transparent!(
                     start, hyphen_seperator, end; Element<_>
                 );
@@ -398,7 +395,7 @@ const HOURS_IN_DAY: [&str; 24] = ["00", "01", "02", "03", "04", "05", "06", "07"
 const MINUTES_IN_HOUR: [&str; 60] = ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59"];
 
 
-fn weekdays<'a, T>(
+fn weekdays<T>(
     f: impl Fn(Weekday) -> T
 ) -> impl Iterator<Item = T> 
 {
@@ -415,31 +412,7 @@ fn weekday_checkbox<'a>(weekday: Weekday, is_toggled: bool) -> Row<'a, Message> 
         .align_y(Vertical::Center)
         .spacing(*LENGTH_UNIT / 2.0)
 }
-/* 
 
-    let element_with_title = |
-        clock_pick_lists: Element<'a, _>, 
-        description: &'static str
-    | -> Column<'a, _>
-    {
-        column![
-            semi_bold_text(description),
-            clock_pick_lists
-        ]
-        .align_x(Horizontal::Center)
-        .spacing(*LENGTH_UNIT * 0.9)
-    };
-
-*/
-
-fn titled_with_seperator<'a>(to_title: impl Into<Element<'a, Message>>, title_text: &'a str) -> Column<'a, Message> {
-    column![
-        semi_bold_text(title_text),
-        horizontal_seperator2(),
-        to_title.into()
-    ]
-    .align_x(Horizontal::Center)
-}
 
 fn time_range_pick_list2<'a>(
     time_range: &time_range::TimeRange,
@@ -447,8 +420,8 @@ fn time_range_pick_list2<'a>(
 ) -> [Element<'a, Message>; 3]
 {
     let start_input = {
-        let start_hour = time_range.start.time().hour() as u8;
-        let start_min = time_range.start.time().minute() as u8;
+        let start_hour = time_range.start.hour() as u8;
+        let start_min = time_range.start.minute() as u8;
 
         let on_start_hour_selected = on_selected.clone();
         let on_start_min_selected = on_selected.clone();
@@ -459,14 +432,13 @@ fn time_range_pick_list2<'a>(
             move |selected| on_start_hour_selected(Bound::Start, Field::Hour, selected),
             move |selected| on_start_min_selected(Bound::Start, Field::Minute, selected),
         )
-        .into()
     };
 
     let hyphen_seperator = bold_text("-").into();
 
     let end_input = {
-        let end_hour = time_range.end.time().hour() as u8;
-        let end_min = time_range.end.time().minute() as u8;
+        let end_hour = time_range.end.hour() as u8;
+        let end_min = time_range.end.minute() as u8;
 
         let on_end_hour_selected = on_selected.clone();
         let on_end_min_selected = on_selected;
@@ -477,48 +449,9 @@ fn time_range_pick_list2<'a>(
             move |input| on_end_hour_selected(Bound::End, Field::Hour, input),
             move |input| on_end_min_selected(Bound::End, Field::Minute, input),
         )
-        .into()
     };
 
     [start_input, hyphen_seperator, end_input]
-}
-fn weekday_time_range_selection<'a>(custom_weekday: &CustomWeekday, weekday: Weekday) -> Element<'a, Message> {
-    let time_range = &custom_weekday.time_range;
-
-    let on_selected = move |bound, field, input| {
-        Message::TimeInputCustom(weekday, bound, field, input)
-    };
-
-    let time_range_pick_list = time_range_pick_list(time_range, on_selected, false);
-
-    if custom_weekday.enabled {
-        time_range_pick_list.into()
-    } else {
-        let semi_transparent = container(
-            space().width(Length::Fill).height(Length::Fill)
-        )                           
-        .style(|_theme| {
-            use container::Style;
-
-            Style {
-                background: Some(
-                    Background::Color(Color {
-                        a: 0.4,
-                        ..Color::WHITE
-                    })
-                ),
-                ..Style::default()
-            }
-        });
-
-        let opaque = opaque(semi_transparent);
-
-        stack![
-            time_range_pick_list,
-            opaque
-        ]
-        .into()
-    }
 }
 
 fn time_range_pick_list<'a>(
@@ -565,8 +498,8 @@ fn two_clock_pick_lists<'a>(
 ) -> (Element<'a, Message>, Element<'a, Message>) 
 {
     let start_clock = {
-        let start_hour = time_range.start.time().hour() as u8;
-        let start_min = time_range.start.time().minute() as u8;
+        let start_hour = time_range.start.hour() as u8;
+        let start_min = time_range.start.minute() as u8;
 
         let on_start_hour_selected = on_selected.clone();
         let on_start_min_selected = on_selected.clone();
@@ -580,8 +513,8 @@ fn two_clock_pick_lists<'a>(
     };
 
     let end_clock = {
-        let end_hour = time_range.end.time().hour() as u8;
-        let end_min = time_range.end.time().minute() as u8;
+        let end_hour = time_range.end.hour() as u8;
+        let end_min = time_range.end.minute() as u8;
 
         let on_end_hour_selected = on_selected.clone();
         let on_end_min_selected = on_selected;
@@ -625,148 +558,93 @@ fn clock_pick_list<'a>(
 
 
 
-// Other items
-impl From<&State> for WeekdayRuleMode {
-    fn from(state: &State) -> Self {
-        match state.mode {
-            Mode::Custom => WeekdayRuleMode::Custom(state.custom.clone()),
-            Mode::Uniform => WeekdayRuleMode::Uniform(state.uniform.clone()),
+// Miscellanous functions
+impl GUITimeRange {
+    pub fn into_block_rule_kind(&self, lock_config: LockConfig) -> BlockRuleKind {
+        match self.mode {
+            Mode::Custom => BlockRuleKind::CustomWeekSchedule(self.into(), lock_config),
+            Mode::Uniform => BlockRuleKind::UniformWeekSchedule(self.into(), lock_config)
         }
     }
 }
 
+impl From<&GUITimeRange> for WeekSchedule<CustomWeek> {
+    fn from(gui_time_range: &GUITimeRange) -> Self {
+        let gui_custom_week = gui_time_range.custom.clone();
+        let custom_week = CustomWeek::from(gui_custom_week);
+        let local_minus_utc = *Local::now().offset();
 
-fn test(
-    time_range: &time_range::TimeRange, 
-    on_selected: impl Fn(Bound, Field, u8) -> Message + Clone, 
-    is_toggled: bool
-) {
-    let weekday_checkbox = weekday_checkbox(Weekday::Mon, is_toggled)
-        .align_y(Vertical::Top);
+        Self {
+            inner: custom_week,
+            local_minus_utc
+        }
 
-    let (start_clock, end_clock) = {
-        let (start_clock, end_clock) = two_clock_pick_lists(time_range, on_selected);
 
-        (start_clock.pad_x(*LENGTH_UNIT * 0.5), end_clock.pad_x(*LENGTH_UNIT * 0.5))
-    };
+    }
+}
 
-    let (start, end) = (
-        titled_with_seperator(start_clock, "Start"),
-        titled_with_seperator(end_clock, "End")
-    );
+impl From<&GUITimeRange> for WeekSchedule<UniformWeekdays> {
+    fn from(gui_time_range: &GUITimeRange) -> Self {
+        let gui_uniform_week = gui_time_range.uniform.clone();
+        let uniform_weekdays = UniformWeekdays::from(gui_uniform_week);
+        let local_minus_utc = *Local::now().offset();
 
-    let hyphen_seperator = titled_with_seperator(bold_text("-"), "");
+        Self {
+            inner: uniform_weekdays,
+            local_minus_utc
+        }
+    }
+}
 
-    let _time_range = row![weekday_checkbox, start, hyphen_seperator, end]
-        .align_y(Vertical::Center)
-        .spacing(*LENGTH_UNIT);
+#[derive(Clone, Debug, Default)]
+struct GUICustomWeek {
+    time_ranges_on_week: TimeRangesOnWeek,
+    enabled_weekdays: WeekdaySet,
+}
+
+impl GUICustomWeek {
+    fn toggle_weekday(&mut self, weekday: Weekday, flag: bool) {
+        if flag {
+            self.enabled_weekdays.insert(weekday);
+        } else {
+            self.enabled_weekdays.remove(weekday);
+        }
+    }
+    fn time_range_on_weekday_mut(&mut self, weekday: Weekday) -> Option<&mut TimeRange> {
+        self.enabled_weekdays
+            .contains(weekday)
+            .then_some(&mut self.time_ranges_on_week[weekday])
+    }
+}
+
+impl GUICustomWeek {
+    fn is_weekday_enabled(&self, weekday: Weekday) -> bool {
+        self.enabled_weekdays.contains(weekday)
+    }
+    fn time_range_on_weekday(&self, weekday: Weekday) -> &TimeRange {
+        &self.time_ranges_on_week[weekday]
+    }
+}
+
+impl From<GUICustomWeek> for CustomWeek {
+    fn from(value: GUICustomWeek) -> Self {
+        let GUICustomWeek { time_ranges_on_week, enabled_weekdays } = value;
+
+        Self::from_parts(time_ranges_on_week, enabled_weekdays)
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct GUIUniformWeek {
+    time_range: TimeRange,
+    enabled_weekdays: WeekdaySet,
 }
 
 
+impl From<GUIUniformWeek> for UniformWeekdays {
+    fn from(value: GUIUniformWeek) -> Self {
+        let GUIUniformWeek { time_range, enabled_weekdays } = value;
 
-
-// Legacy stuff, in case if needed 
-
-/* 
-fn time_range_text_input<'a, Message: Clone + 'a>(
-    time_range: &time_range::TimeRange,
-    on_input: impl Fn(Bound, Field, u32) -> Message + Clone + 'a,
-    on_err: impl Fn(String) -> Message + Clone + 'a,
-) -> Element<'a, Message> {
-    let start_input = {
-        let start_hour = time_range.start.hour().to_string();
-        let start_min = time_range.start.minute().to_string();
-
-        let on_input_start_hour = on_input.clone();
-        let on_input_start_min = on_input.clone();
-
-        let on_err_start = on_err.clone();
-
-        clock_text_input(
-            &start_hour,
-            &start_min,
-            move |input| on_input_start_hour(Bound::Start, Field::Hour, input),
-            move |input| on_input_start_min(Bound::Start, Field::Minute, input),
-            on_err_start,
-        )
-    };
-    let end_input = {
-        let end_hour = time_range.end.hour().to_string();
-        let end_min = time_range.end.minute().to_string();
-
-        let on_input_end_hour = on_input.clone();
-        let on_input_end_min = on_input;
-
-        let on_err_end = on_err;
-
-        clock_text_input(
-            &end_hour,
-            &end_min,
-            move |input| on_input_end_hour(Bound::End, Field::Hour, input),
-            move |input| on_input_end_min(Bound::End, Field::Minute, input),
-            on_err_end,
-        )
-    };
-
-    row![start_input, "to", end_input].into()
-}
-
-fn clock_text_input<'a, Message: Clone + 'a>(
-    hour: &str,
-    minute: &str,
-    on_hour_input: impl Fn(u32) -> Message + 'a,
-    on_min_input: impl Fn(u32) -> Message + 'a,
-    on_err: impl Fn(String) -> Message + Clone + 'a,
-) -> Element<'a, Message> {
-    let on_err_hour = on_err.clone();
-
-    let hour_input = text_input("", hour).on_input(move |input| {
-        match input.parse::<u32>() {
-            Ok(value) if value < 24 => on_hour_input(value),
-            Err(e) if let IntErrorKind::Empty = e.kind() => on_hour_input(0),
-            _error => on_err_hour(input),
-        }
-    });
-
-    let on_err_min = on_err;
-
-    let minute_input = text_input("", minute).on_input(move |input| {
-        match input.parse::<u32>() {
-            Ok(value) if value < 60 => on_min_input(value),
-            Err(e) if let IntErrorKind::Empty = e.kind() => on_min_input(0),
-            _error => on_err_min(input)
-        }
-    });
-
-    row![hour_input, ":", minute_input,].into()
-}
-*/
-
-fn semi_transperent<'a>(
-    element: Element<'a, Message>,
-) -> Stack<'a, Message>
-{
-    let semi_transparent_layer = container(
-        space().width(Length::Fill).height(Length::Fill)
-    )                           
-    .style(|_theme| {
-        use container::Style;
-
-        Style {
-            background: Some(
-                Background::Color(Color {
-                    a: 0.4,
-                    ..Color::WHITE
-                })
-            ),
-            ..Style::default()
-        }
-    });
-
-    let opaque = opaque(semi_transparent_layer);
-
-    stack![
-        element,
-        opaque
-    ]
+        Self::from_parts(time_range, enabled_weekdays)
+    }
 }

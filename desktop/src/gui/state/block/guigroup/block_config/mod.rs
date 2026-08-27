@@ -17,16 +17,17 @@ use iced::widget::{
 };
 
 use lock_config::{self as l_c, LockConfig};
-use time_range::State;
+use time_range::GUITimeRange;
 use timer::Timer;
 
 use crate::{
-    core::block::{time_range::WeekdayRuleMode, timer::Timer as CoreTimer},
+    core::block::{time_range::WeekSchedule, timer::Timer as CoreTimer},
     platform::Blocker,
 };
 
-use crate::core::block::block_rule::{LockConfig as CoreLockConfig};
 use crate::core::block::{BlockConfig as CoreBlockConfig, BlockRuleKind, Group, LockWhenBlocked};
+use crate::core::block::block_rule::{LockConfig as CoreLockConfig};
+use crate::core::block::time_range::WeekScheduleT;
 use crate::gui::state::modal;
 use crate::gui::state::{action, bold_text, button_with_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
 use crate::unwrap_variant;
@@ -72,7 +73,7 @@ pub struct BlockConfig {
     lock_config: LockConfig,
     tab: Tab,
     timer: Timer,
-    time_range: time_range::State,
+    time_range: GUITimeRange,
     error: Option<&'static str>,
 }
 
@@ -83,7 +84,7 @@ impl BlockConfig {
             tab: Tab::Timer,
             lock_config: LockConfig::new(),
             timer: Timer::new(),
-            time_range: time_range::State::new(),
+            time_range: GUITimeRange::new(),
             error: None,
         }
     }
@@ -197,9 +198,7 @@ impl BlockConfig {
                         BlockRuleKind::Timer { timer, lock_when_blocked }
                     }
                     Tab::TimeRange => {
-                        let weekday_rule_mode = WeekdayRuleMode::from(&self.time_range);
-
-                        BlockRuleKind::TimeRange(weekday_rule_mode, core_lock_config)
+                        self.time_range.into_block_rule_kind(core_lock_config)
                     }
                 };
 

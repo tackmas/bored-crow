@@ -15,7 +15,7 @@ use tokio::time::{Duration, sleep};
 use qsu::argp::{ArgParser, ArgsProc};
 use qsu::async_trait;
 use qsu::log;
-use qsu::rt::{InitCtx, RunCtx, RunEnv, SrvAppRt, SvcEvt, TermCtx, TokioServiceHandler};
+use qsu::rt::{Demise, InitCtx, RunCtx, RunEnv, SrvAppRt, SvcEvt, TermCtx, TokioServiceHandler};
 
 // Local
 
@@ -31,6 +31,12 @@ enum _Error {
     AlreadyBlocked,
     IsLocked,
 }
+
+enum Shutdown {
+    Restart,
+    Uninstall
+}
+
 
 fn main() {
     println!("Hello, world!");
@@ -59,7 +65,7 @@ impl ArgsProc for Args {
         runctx.init_passthrough_r(uninstall_tx);
 
         let svcevt_handler = Box::new(move |event| {
-            if let SvcEvt::Shutdown(_) = event {
+            if let SvcEvt::Shutdown(Demise::Terminated) = event {
                 let _ = restart_tx.blocking_send(Shutdown::Restart);
             }
         });
@@ -75,12 +81,6 @@ impl ArgsProc for Args {
         })
     }
 }
-
-enum Shutdown {
-    Restart,
-    Uninstall
-}
-
 
 #[derive(Debug)]
 pub struct AppError;
@@ -159,11 +159,13 @@ fn on_shutdown(shutdown: Shutdown) {
                 current_exe_path.push("restarter.exe");
                 current_exe_path
              };
-
+            
+            // Relevant to UNIX platforms only:
+            // Parent (this binary) will exit after this call, and the child's parent will become init,
+            // which periodically calls wait on the child. Therefore no zombie process will be left behind
+            #[allow(clippy::zombie_processes)]
             Command::new(restarter_path)
                 .spawn()
-                .unwrap()
-                .wait()
                 .unwrap();
         },
         Shutdown::Uninstall => ()
