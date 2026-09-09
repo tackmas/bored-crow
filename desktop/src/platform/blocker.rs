@@ -1,27 +1,29 @@
-use std::{collections::HashSet, ffi::OsStr};
+use std::{collections::HashMap, ffi::OsStr};
+use std::ffi::OsString;
+use std::sync::Arc;
 
 use sysinfo::{ProcessesToUpdate, System};
 use tokio::{
     self,
-    sync::mpsc::Receiver,
+    sync::mpsc::{self, Sender, Receiver},
     task,
     time::{self, Duration},
 };
 
-use super::{App, BlockerMessage, BlockerReply, Request};
+use super::{BlockerMessage, ProcessName};
 
-pub async fn run(mut receiver: Receiver<Request<BlockerMessage, BlockerReply>>) {
+pub async fn run(mut receiver: Receiver<BlockerMessage>) {
     task::spawn(async move {
-        let mut system = System::new_all();
-        let mut block = HashSet::new();
-        let mut interval = time::interval(Duration::from_millis(500));
+        let mut system = System::new_all().unwrap();
+        let mut process_names = HashMap::new();
+        let mut half_sec_interval = time::interval(Duration::from_millis(500));
 
         loop {
             tokio::select! {
                 raw_req = receiver.recv() => {
                     match raw_req {
                         Some(req) => {
-                            handle_req(req, &mut block);
+                            handle_req(req, &mut process_names);
                         }
                         None => {
                             println!{"Blocker channel has been closed"};
@@ -29,45 +31,39 @@ pub async fn run(mut receiver: Receiver<Request<BlockerMessage, BlockerReply>>) 
                         }
                     }
                 }
-                _ = interval.tick() => scan_and_kill_process(&mut system,  &block),
+                _ = half_sec_interval.tick() => scan_and_kill_process(&mut system,  process_names.keys()),
             }
         }
     });
 }
 
-fn handle_req(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
-    match req.data {
-        BlockerMessage::Block(app) => {
-            block.insert(app.name);
+fn handle_req(req: BlockerMessage, process_names: &mut HashMap<ProcessName, usize>) {
+    match req {
+        BlockerMessage::Block(process_name) => {
+            let process_name_counter = process_names.entry(process_name).or_insert(0);
 
-            req.replier.send(BlockerReply::None).unwrap();
+            *process_name_counter += 1;
         },
-        BlockerMessage::Unblock(app) => {
-            block.remove(&app.name);
+        BlockerMessage::Unblock(process_name) => {
+            let Some(process_name_counter) = process_names.get_mut(&process_name) else {
+                eprintln!("{:?} is already not blocked (blocker.rs)", process_name);
 
-            req.replier.send(BlockerReply::None).unwrap();
-        },
-        BlockerMessage::GetInfo => {
-            let blocked: Vec<App> = block
-                .iter()
-                .map(|name| App::from(name.clone()))
-                .collect();
+                return;
+            };
 
-            let reply = BlockerReply::Info(blocked);
+            *process_name_counter -= 1;
 
-            req.replier.send(reply).unwrap();
-
-            return;
-        }
+            if *process_name_counter == 0 {
+                process_names.remove(&process_name);
+            }
+        },  
     }
 }
 
-fn scan_and_kill_process(system: &mut System, apps: &HashSet<String>) {
-    let names: Vec<&OsStr> = apps.iter().map(|app| app.as_ref()).collect();
-
-    for name in names {
+fn scan_and_kill_process<'a>(system: &mut System, process_names: impl IntoIterator<Item = &'a ProcessName>) {
+    for process_name in process_names {
         system.refresh_processes(ProcessesToUpdate::All, true);
-        let mut blocked_processes = system.processes_by_name(name);
+        let mut blocked_processes = system.processes_by_name(process_name.as_ref().as_ref());
 
         while let Some(p) = blocked_processes.next() {
             p.kill();
@@ -75,13 +71,3 @@ fn scan_and_kill_process(system: &mut System, apps: &HashSet<String>) {
     }
 }
 
-fn handle_req2(req: Request<BlockerMessage, BlockerReply>, block: &mut HashSet<String>) {
-    if let BlockerMessage::GetInfo = req.data {
-        let blocked: Vec<App> = block.iter().map(|name| App::from(name.clone())).collect();
-
-        let reply = BlockerReply::Info(blocked);
-
-        req.replier.send(reply).unwrap();
-    } else {
-    }
-}

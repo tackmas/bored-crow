@@ -1,33 +1,21 @@
-use std::{fs, path::PathBuf};
+use std::fs;
+use std::path::PathBuf;
 
 use directories::ProjectDirs;
-
-use iced::Task;
 
 use serde::{Deserialize, Serialize};
 
 use serde_json;
 
 use crate::{APP_NAME, USERNAME};
+use crate::group::{BlockRuleKind, Id};
 
-use crate::core::block::BlockConfig;
-use crate::gui::state::block::SavedBlock;
-use crate::gui::state::settings::SavedSettings;
-use crate::gui::state::State;
-
-#[derive(Serialize, Deserialize)]
-pub struct SavedData {
-    pub block: SavedBlock,
-    pub settings: SavedSettings,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Saved {
+    pub groups: Vec<Group>
 }
 
-impl SavedData {
-    pub(super) fn from_state(state: &State, block_rule: Option<BlockConfig>) -> Self {
-        Self {
-            block: SavedBlock::from_block(&state.block, block_rule),
-            settings: SavedSettings::from_settings(&state.settings),
-        }
-    }
+impl Saved {
     pub fn load() -> Option<Self> {
         let path = state_path();
         let json = fs::read_to_string(&path).unwrap();
@@ -102,4 +90,12 @@ async fn async_state_path() -> PathBuf {
         .unwrap();
 
     state_path
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Group {
+    pub id: Id,
+    pub name: String,
+    pub apps: Vec<String>,
+    pub block_config: Option<BlockRuleKind>
 }

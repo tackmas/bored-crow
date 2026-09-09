@@ -1,31 +1,24 @@
+use std::ffi::{OsStr, OsString};
+use std::ops::{Deref, DerefMut};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
+    OnceLock,
 };
 
 use anyhow::Result;
+
+use serde::{Deserialize, Serialize};
+
 use tokio::{
     sync::{mpsc, oneshot},
     time,
 };
 
-use crate::unwrap_variant;
+use crate::{impl_deref_mut_for_newtype, unwrap_variant};
 
 mod apps;
 mod blocker;
-
-struct Request<T, R> {
-    data: T,
-    replier: oneshot::Sender<R>,
-}
-
-impl<T, R> Request<T, R> {
-    fn new(data: T) -> (Request<T, R>, oneshot::Receiver<R>) {
-        let (replier, reciever) = oneshot::channel();
-
-        (Request { data, replier }, reciever)
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct App {
@@ -58,13 +51,23 @@ impl From<String> for App {
 }
 
 static BLOCKER_NEW_CALLED: AtomicBool = AtomicBool::new(false);
+static BLOCKER: OnceLock<Blocker> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct Blocker {
-    sender: mpsc::Sender<Request<BlockerMessage, BlockerReply>>,
+    sender: mpsc::Sender<BlockerMessage>,
 }
 
 impl Blocker {
+    pub async fn init() {
+        let (sender, reciever) = mpsc::channel(100);
+
+        blocker::run(reciever).await;
+
+        let blocker = Blocker { sender };
+
+        BLOCKER.set(blocker);       
+    }
     pub async fn new() -> Result<Self, &'static str> {
         if BLOCKER_NEW_CALLED.load(Ordering::Relaxed) {
             return Err("already called this function");
@@ -78,96 +81,57 @@ impl Blocker {
 
         Ok(Blocker { sender })
     }
-    pub async fn block(&self, app: &App) {
-        let msg = BlockerMessage::Block(app.clone());
+    pub async fn block_process(&self, process_name: ProcessName) {
+        let msg = BlockerMessage::Block(process_name);
 
-        self.blocker_request(msg).await;
+        self.sender
+            .send(msg)
+            .await
+            .expect("Reciever should never be dropped since it recieves in a indefinte loop until Blocker goes out of scope");
     }
-    pub async fn block_vec(&self, apps: &Vec<&App>) {
+    pub async fn block_processes(&self, process_names: impl IntoIterator<Item = ProcessName>) {
         println!("Attmepting to block vector of apps");
 
-        for app in apps {
-            self.block(app).await
+        for process_name in process_names {
+            self.block_process(process_name).await
         }
 
         println!("Blocked vector of apps.");
     }
-    pub async fn unblock(&self, app: &App) {
-        let msg = BlockerMessage::Unblock(app.clone());
+    pub async fn unblock_process(&self, process_name: ProcessName) {
+        let msg = BlockerMessage::Unblock(process_name);
 
-        self.blocker_request(msg).await;
+        self.sender
+            .send(msg)
+            .await
+            .expect("Reciever should never be dropped since it recieves in a indefinte loop until Blocker goes out of scope");
     }
-    pub async fn unblock_vec(&self, apps: &Vec<&App>) {
-        for app in apps {
-            self.unblock(app).await
+    pub async fn unblock_processes(&self, process_names: impl IntoIterator<Item = ProcessName>) {
+        for process_name in process_names {
+            self.unblock_process(process_name).await
         }
     }
 
-    pub async fn list_blocked(&self) -> Vec<App> {
-        let msg = BlockerMessage::GetInfo;
-
-        let response = self.blocker_request(msg).await;
-
-        unwrap_variant!(response, BlockerReply::Info => a)
-    }
-
-    async fn blocker_request(&self, req_data: BlockerMessage) -> BlockerReply {
-        let (request, mut reciever) = Request::new(req_data);
-
-        self.sender.send(request).await.unwrap();
-
-        let response = loop {
-            match reciever.try_recv() {
-                Ok(response) => break response,
-                Err(_) => {
-                    time::sleep(time::Duration::from_millis(100)).await;
-
-                    continue;
-                }
-            }
-        };
-
-        response
-    }
 }
 
 enum BlockerMessage {
-    Block(App),
-    Unblock(App),
-    GetInfo,
+    Block(ProcessName),
+    Unblock(ProcessName),
 }
 
-#[derive(Debug)]
-enum BlockerReply {
-    None,
-    Info(Vec<App>),
-}
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct ProcessName(pub Arc<str>);
 
 
-/*
-pub struct BlockedApps {
-    apps_quantity: usize,
-    apps_is_blocked: Arc<Vec<AtomicU32>>
-}
 
-impl BlockedApps {
-    pub fn new() -> Self {
-        let apps_quantity = App::all_apps()
-            .unwrap()
-            .len();
-
-        let len = (apps_quantity / 32) + 1;
-        let vec = (0..len)
-            .into_iter()
-            .map(|_| AtomicU32::new(0))
-            .collect();
-
-        let apps_is_blocked = Arc::new(vec);
-
-        BlockedApps {
-            apps_quantity,
-            apps_is_blocked
-        }
+impl ProcessName {
+    pub fn from(from: impl Into<Arc<str>>) -> Self {
+        ProcessName(from.into())
+    }
+    // Clones
+    pub fn from_os_str(os_str: &OsStr) -> Self {
+        ProcessName(os_str.to_string_lossy().into())
     }
 }
-*/
+
+impl_deref_mut_for_newtype!(ProcessName, Arc<str>);

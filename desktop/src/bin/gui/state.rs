@@ -1,14 +1,8 @@
 mod action;
 mod block;
 mod grid;
-pub mod saved_data;
 mod settings;
 mod modal;
-
-pub use saved_data::SavedData;
-
-pub use block::SavedBlock;
-pub use settings::SavedSettings;
 
 use std::io::Write;
 use std::sync::LazyLock;
@@ -38,10 +32,9 @@ use block::BlockState;
 
 use crate::{APP_NAME};
 
-use crate::{
-    core::block::{BlockConfig, Group},
-    platform::Blocker,
-};
+use desktop::group::{BlockConfig, Group};
+use desktop::platform::Blocker;
+use desktop::saved::{Saved};
 
 use self::modal::construct_modal;
 
@@ -99,8 +92,8 @@ pub struct State {
 
 impl State {
     pub(super) async fn new() -> Self {
-        if let Some(saved) = SavedData::load() {
-            return Self::from_saved_data(saved).await;
+        if let Some(saved) = Saved::load() {
+            return Self::from_saved(saved).await;
         }
 
         *SCREEN_SIZE;
@@ -116,22 +109,19 @@ impl State {
         }
     }
 
-    async fn from_saved_data(saved_state: SavedData) -> Self {
+    async fn from_saved(saved: Saved) -> Self {
         let blocker = Blocker::new().await.unwrap();
 
         Self {
             blocker: blocker.clone(),
             screen: Screen::Block,
             modal: None,
-            block: BlockState::from_saved(saved_state.block, &blocker).await,
-            settings: saved_state.settings.into_settings(),
+            block: BlockState::from_saved(saved, &blocker).await,
+            settings: SettingsState {  },
         }
     }
-    pub fn into_saved_data(&self, block_rule: Option<BlockConfig>) -> SavedData {
-        SavedData {
-            block: SavedBlock::from_block(&self.block, block_rule),
-            settings: SavedSettings::from_settings(&self.settings),
-        }
+    pub fn into_saved_data(&self, block_config: Option<BlockConfig>) -> Saved {
+        self.block.into_saved(block_config)
     }
 
     pub(super) fn update(&mut self, message: Message) -> Task<Message> {
@@ -144,16 +134,16 @@ impl State {
                         .update(msg)
                         .map_task(|msg| Message::Block(Route::Forward(msg)));
 
-                    let mut block_rule_opt = None;
+                    let mut block_config_opt = None;
 
                     let task = match action.custom_opt {
                         None => Task::none(),
-                        Some(block::CA::Block(group, block_rule)) => {
+                        Some(block::CA::Block(group, block_config)) => {
                             let blocker = self.blocker.clone();
-                            block_rule_opt = Some(block_rule.clone());
+                            block_config_opt = Some(block_config.clone());
 
                             Task::perform(
-                                group.block(block_rule, blocker),
+                                group.block(block_config, blocker),
                                 |_| Message::Refresh
                             )
                         }
@@ -162,10 +152,10 @@ impl State {
                     handle_modal_action(&mut self.modal, action.modal, || Modal::Block);
 
                     if action.save {
-                        let saved = SavedData::from_state(&*self, block_rule_opt);
+                        let saved = self.into_saved_data(block_config_opt);
 
                         let save_task = Task::future(async move {
-                            SavedData::async_save(&saved).await;
+                            Saved::async_save(&saved).await;
                         })
                         .discard();
 
@@ -286,6 +276,7 @@ fn bold_text<'a>(text_str: &'a str) -> Text<'a> {
         })
 }
 
+
 static SCREEN_SIZE: LazyLock<Size<u32>> = LazyLock::new(|| {
     let (w, h) = f_screen_size::get_primary_screen_size().unwrap();
 
@@ -295,6 +286,7 @@ static SCREEN_SIZE: LazyLock<Size<u32>> = LazyLock::new(|| {
     }
 });
 
+// Roughly 5 pixels on a 1080/720 px screen
 static LENGTH_UNIT: LazyLock<f32> = LazyLock::new(|| {
     SCREEN_SIZE.width as f32 / 200.0
 });

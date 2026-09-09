@@ -21,13 +21,13 @@ use iced::widget::{
 };
 
 use crate::make_semi_transparent;
-use crate::core::block::block_rule::{BlockRuleKind, LockConfig};
-use crate::core::block::time_range::{
-    self, CustomWeek, TimeRange, TimeRangesOnWeek, UniformWeekdays, WeekSchedule, WeekScheduleT
+use desktop::group::{
+    BlockRuleKind, CustomWeek, LockConfig, TimeRange, 
+    TimeRangesOnWeek, UniformWeekdays, WeekSchedule
 };
-use crate::gui::state::grid::Grid;
-use crate::gui::state::{bold_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
-use crate::gui::state::modal::{horizontal_seperator, horizontal_seperator2, radio_with_border, title};
+use crate::state::grid::Grid;
+use crate::state::{bold_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
+use crate::state::modal::{horizontal_seperator, horizontal_seperator2, radio_with_border, title};
 
 #[derive(Clone, Copy)]
 enum Field {
@@ -156,7 +156,7 @@ impl GUITimeRange {
 
 // Helper functions for update
 fn change_time_range(
-    time_range: &mut time_range::TimeRange,
+    time_range: &mut TimeRange,
     bound: Bound,
     field: Field,
     input: impl Into<u32>,
@@ -258,51 +258,7 @@ wheras Uniform Mode has the same time range on all days",
         .into()
     }
 
-    /* 
-    fn custom_mode(&self) -> Element<'_, Message> {
-        let mut weekday_elements = column![];
 
-        let start_end_header = {
-            let start = semi_bold_text("Start");
-            let end = semi_bold_text("End");
-
-            row![start, end, space().width(Length::Fill)]
-                .spacing(*LENGTH_UNIT)
-        };
-
-        weekday_elements = weekday_elements.extend([start_end_header.into(), horizontal_seperator2().into()]);
-
-        for weekday in WeekdaySet::ALL.iter(Weekday::Mon) {
-            let custom_weekday = &self.custom[weekday];
-            let is_toggled = custom_weekday.enabled;
-
-            let weekday_checkbox = weekday_checkbox(weekday, is_toggled)
-                .align_y(Vertical::Top);
-
-            let weekday_time_range_selection = weekday_time_range_selection(custom_weekday, weekday);
-
-            let weekday_element = row![weekday_checkbox, weekday_time_range_selection]
-                .align_y(Vertical::Center)
-                .spacing(*LENGTH_UNIT)
-                .pad_x(*LENGTH_UNIT);
-
-            weekday_elements = weekday_elements.push(weekday_element);
-
-            if weekday != Weekday::Sun {
-                let horizontal_seperator = horizontal_seperator2();
-
-                weekday_elements = weekday_elements.push(horizontal_seperator);
-            }
-        };
-
-        weekday_elements
-            .width(Length::Shrink)
-            .align_x(Horizontal::Right)
-            .spacing(*LENGTH_UNIT)
-            .into()
-    }
-
-    */
     fn custom_mode2(&self) -> Element<'_, Message> {
         let padding = Padding::ZERO.right(*LENGTH_UNIT);
 
@@ -415,7 +371,7 @@ fn weekday_checkbox<'a>(weekday: Weekday, is_toggled: bool) -> Row<'a, Message> 
 
 
 fn time_range_pick_list2<'a>(
-    time_range: &time_range::TimeRange,
+    time_range: &TimeRange,
     on_selected: impl Fn(Bound, Field, u8) -> Message + Clone + 'a,
 ) -> [Element<'a, Message>; 3]
 {
@@ -455,7 +411,7 @@ fn time_range_pick_list2<'a>(
 }
 
 fn time_range_pick_list<'a>(
-    time_range: &time_range::TimeRange,
+    time_range: &TimeRange,
     on_selected: impl Fn(Bound, Field, u8) -> Message + Clone + 'a,
     with_title: bool
 ) -> Element<'a, Message>
@@ -493,7 +449,7 @@ fn time_range_pick_list<'a>(
 }
 
 fn two_clock_pick_lists<'a>(
-    time_range: &time_range::TimeRange,
+    time_range: &TimeRange,
     on_selected: impl Fn(Bound, Field, u8) -> Message + Clone + 'a,
 ) -> (Element<'a, Message>, Element<'a, Message>) 
 {

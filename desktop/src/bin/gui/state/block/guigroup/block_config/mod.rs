@@ -20,17 +20,16 @@ use lock_config::{self as l_c, LockConfig};
 use time_range::GUITimeRange;
 use timer::Timer;
 
-use crate::{
-    core::block::{time_range::WeekSchedule, timer::Timer as CoreTimer},
-    platform::Blocker,
+use desktop::unwrap_variant;
+use desktop::group::{
+    BlockConfig as CoreBlockConfig, BlockRuleKind, Group, 
+    LockWhenBlocked, Timer as CoreTimer, WeekScheduleT
 };
-
-use crate::core::block::{BlockConfig as CoreBlockConfig, BlockRuleKind, Group, LockWhenBlocked};
-use crate::core::block::block_rule::{LockConfig as CoreLockConfig};
-use crate::core::block::time_range::WeekScheduleT;
-use crate::gui::state::modal;
-use crate::gui::state::{action, bold_text, button_with_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
-use crate::unwrap_variant;
+use crate::state::modal;
+use crate::state::{
+    action, bold_text, button_with_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text
+};
+use desktop::platform::Blocker;
 
 const COLOR_RED: Color = Color::from_rgb(1.0, 0.0, 0.0);
 
@@ -195,7 +194,7 @@ impl BlockConfig {
                         let timer = CoreTimer::new(duration);
                         let lock_when_blocked = LockWhenBlocked::from_lock_config(&core_lock_config);
 
-                        BlockRuleKind::Timer { timer, lock_when_blocked }
+                        BlockRuleKind::Timer(timer, lock_when_blocked)
                     }
                     Tab::TimeRange => {
                         self.time_range.into_block_rule_kind(core_lock_config)

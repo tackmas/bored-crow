@@ -1,8 +1,6 @@
 mod guigroup;
 mod manage_guigroup;
 
-pub use guigroup::SavedGUIGroup;
-
 use std::sync::Arc;
 
 // Dependencies (alphabetical order)
@@ -20,14 +18,16 @@ use iced::{
 use serde::{Deserialize, Serialize};
 
 // Local
-use crate::{
+use desktop::{
     platform::{App, Blocker},
     unwrap_variant,
 };
 
-use crate::core::block::{BlockConfig, Group};
-use crate::core::block::id::Id;
-use crate::gui::state::{action, handle_modal_action, Route, SCREEN_SIZE};
+
+use desktop::group::{AsId, BlockConfig, BlockRuleKind, Group, Id};
+use desktop::saved::{Group as SavedGroup, Saved};
+
+use crate::state::{action, handle_modal_action, Route, SCREEN_SIZE};
 
 use guigroup::GUIGroup;
 use manage_guigroup as m_gg;
@@ -53,31 +53,24 @@ pub enum Modal {
 pub struct BlockState {
     modal: Option<Modal>,
     guigroups: Vec<GUIGroup>,
-    all_apps: Arc<[App]>,
 }
 
 impl BlockState {
     pub fn new() -> Self {
         Id::init().unwrap();
 
-        let all_apps = App::all_apps().unwrap().into();
-
         BlockState {
             modal: None,
             guigroups: Vec::new(),
-            all_apps,
         }
     }
 
-    pub async fn from_saved(saved: SavedBlock, blocker: &Blocker) -> Self {
-        let all_apps: Arc<[App]> = App::all_apps().unwrap().into();
-
+    pub async fn from_saved(saved: Saved, blocker: &Blocker) -> Self {
         let guigroups = future::join_all(
-            saved.guigroups
+            saved.groups
                 .into_iter()
-                .map(|saved_guigroup| {
-                    let all_apps = Arc::clone(&all_apps);
-                    GUIGroup::from_saved(saved_guigroup, all_apps, blocker)
+                .map(|saved_group| {
+                    GUIGroup::from_saved(saved_group, blocker)
                 })
         ).await;
             
@@ -86,7 +79,23 @@ impl BlockState {
         BlockState {
             modal: None,
             guigroups,
-            all_apps,
+        }
+    }
+
+    pub fn into_saved(&self, mut block_config_opt: Option<BlockConfig>) -> Saved {
+        let groups = self.guigroups
+            .iter()
+            .map(|guigroup| {
+                let block_rule_kind = block_config_opt
+                    .take_if(|block_config| guigroup.as_id() == block_config.as_id())
+                    .map(|block_config| block_config.kind);
+
+                guigroup.into_saved_group(block_rule_kind)
+            })
+            .collect();
+
+        Saved {
+            groups
         }
     }
 
@@ -103,8 +112,7 @@ impl BlockState {
                 }
                 (None, Route::Forward(_)) => Action::none(),
                 (None, Route::Open(())) => {
-                    let all_apps = self.all_apps.clone();
-                    let new_guigroup = m_gg::ManageGroup::from(all_apps);
+                    let new_guigroup = m_gg::ManageGroup::new();
                     self.modal = Some(Modal::NewGUIGroup(new_guigroup));
 
                     Action::none().open_modal()
@@ -154,9 +162,8 @@ impl BlockState {
 
                     unwrap_variant!(modal, Modal::NewGUIGroup => new_guigroup)
                 };
-                let id = Id::new_unique_id().unwrap();
 
-                let guigroup = GUIGroup::from_manage_group(new_guigroup, id);
+                let guigroup = GUIGroup::new_with_new_guigroup(new_guigroup);
 
                 self.guigroups.push(guigroup);
 
@@ -253,6 +260,8 @@ fn guigroup_element<'a>(
         .map(move |msg| Message::GUIGroup(i, msg))
 }
 
+/*
+
 #[derive(Serialize, Deserialize)]
 pub struct SavedBlock {
     pub guigroups: Vec<SavedGUIGroup>,
@@ -279,3 +288,4 @@ impl SavedBlock {
     }
 }
 
+*/

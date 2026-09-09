@@ -1,30 +1,38 @@
 mod time;
 
 // Std
+use std::path::Path;
 use std::sync::Arc;
 
 // External
-use chrono::Local;
-
 use futures::future;
 
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Stream, ToNsName};
 use interprocess::local_socket::tokio::Listener;
 
+use futures::StreamExt;
+
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
+use tokio::task::LocalSet;
+
+use windows::core::{BSTR, Error, HRESULT, w};
+use windows::Win32::Foundation::WIN32_ERROR;
+use windows::Win32::System::Registry::{
+    HKEY, HKEY_LOCAL_MACHINE, RegNotifyChangeKeyValue, REG_NOTIFY_CHANGE_LAST_SET, RegOpenKeyW
+};
+use wmi::{Variant, WMIConnection, WMIError};
 
 // Local
 use desktop::{APP_NAME, can_uninstall};
-use desktop::core::block::Group;
-use desktop::gui::saved_data::SavedData;
+use desktop::group::Group;
+use desktop::saved::Saved;
 use desktop::ipc::{Request, Response, Signal, ServerBound, IPCServerExt};
 use desktop::platform::{App, Blocker};
 
 use crate::Shutdown;
 
 pub struct State {
-    pub time_zone: Local,
     pub blocker: Blocker,
     pub groups: Vec<Arc<Group>>,
     pub uninstall_tx: mpsc::Sender<Shutdown>
@@ -32,14 +40,12 @@ pub struct State {
 
 impl State {
     pub async fn load(uninstall_tx: mpsc::Sender<Shutdown>) -> Self {
-        let time_zone = Local::now().timezone();
         let blocker = Blocker::new()
             .await
             .unwrap();
         let groups = load_groups_from_disk(&blocker).await;
 
         Self { 
-            time_zone,
             blocker, 
             groups,
             uninstall_tx
@@ -48,7 +54,15 @@ impl State {
     pub async fn run(&mut self) {
         //std::thread::spawn(run_time_change_watcher);
 
-        self.ipc_listener().await;
+        let local_set = LocalSet::new();
+
+        local_set.run_until(async {
+            tokio::task::spawn_local(async {
+                service_deletion_event_listener().await;
+            });   
+
+            self.ipc_listener().await;
+        }).await;
     }
 
     async fn ipc_listener(&mut self) {
@@ -138,24 +152,102 @@ impl State {
 
 
 pub async fn load_groups_from_disk(blocker: &Blocker) -> Vec<Arc<Group>> {
-    let Some(saved): Option<SavedData> = SavedData::load() else {
+    let Some(saved): Option<Saved> = Saved::load() else {
         return Vec::new();
     };
 
-    let all_apps: Arc<[App]> = App::all_apps()
-        .unwrap()
-        .into();
-
-    let groups = future::join_all(
-        saved.block.guigroups
+    future::join_all(
+        saved.groups
             .into_iter()
-            .map(|s_guigroup| {
-                let all_apps = all_apps.clone();
-                Group::from_saved(s_guigroup.group, all_apps, &blocker)
+            .map(|saved_group| {
+                Group::from_saved(saved_group, blocker)
             })
-    ).await;
+    ).await
+}
 
-    groups
+
+async fn service_deletion_event_listener() -> Result<(), MyError> {
+    let wmi_con = WMIConnection::with_namespace_path("root\\default").unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+
+    let registry_key_change_event_query = "SELECT * FROM RegistryKeyChangeEvent \
+                                        WHERE Hive='HKEY_LOCAL_MACHINE' \
+                                        AND KeyPath='SYSTEM\\\\CurrentControlSet\\\\Services\\\\Bored Crow'";
+
+    let mut event_reciever = wmi_con.exec_notification_query_async(registry_key_change_event_query)
+        .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+
+    while let Some(event_res) = event_reciever.next().await {
+        let event = event_res.unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+
+        let (std_reg_prov, get_security_descriptor)  = ("StdRegProv", "GetSecurityDescriptor");
+
+        let in_params = wmi_con
+            .get_object(std_reg_prov)
+            .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)))
+            .get_method(get_security_descriptor)
+            .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)))
+            .unwrap()
+            .spawn_instance()
+            .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+
+        in_params.put_property("hDefKey", 2147483650u32).unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+        in_params.put_property("sSubKeyName", r"SYSTEM\\\\CurrentControlSet\\\\Services\\\\Bored Crow")
+            .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+
+        let out = wmi_con.exec_method(std_reg_prov, get_security_descriptor, Some(&in_params))
+            .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)))
+            .unwrap();
+
+        let variant = out.get_property("Descriptor")
+            .unwrap_or_else(|error| panic!("{:?}", MyError::from(error)));
+
+        let Variant::Object(security_descriptor) = variant else {
+                panic!("{variant:?}");
+            };
+
+        let control_flags = match security_descriptor.get_property("ControlFlags").unwrap_or_else(|error| panic!("{:?}", MyError::from(error))) {
+            Variant::UI4(v) => v,
+            other => panic!("{other:?}"),
+        };
+            let se_dacl_present_true = 0b100;
+
+        println!("SE_DACL_PRESENT: {}", control_flags & se_dacl_present_true);
+
+        /* 
+
+        // Set SE_DACL_PRESENT bit to true.
+        let se_dacl_present_true = 0b100;
+        security_descriptor.put_property("ControlFlags", control_flags | se_dacl_present_true);
+
+        let a = match security_descriptor.get_property("DACL").unwrap() {
+            Variant::Array(variants) => variants,
+            other => panic!("{other:?}")
+        };
+
+        */
+    }
+
+    Ok(())
+}
+
+fn hklm_open_reg_key(reg_key_path: &'static str) -> Result<HKEY, Error> {
+    let reg_key_path = Path::new(reg_key_path);
+    let mut hkey = HKEY_LOCAL_MACHINE;
+    
+    for subkey in reg_key_path.iter() {
+        let subkey = subkey
+            .to_str()
+            .expect("`subkey` was originally &str, so it is valid unicode");
+        let lpsubkey = BSTR::from(subkey);
+
+        let result = unsafe { RegOpenKeyW(hkey, &lpsubkey, &mut hkey) };
+        
+        if result.is_err() {
+            return Err(Error::from(result));
+        }
+    }
+
+    Ok(hkey)
 }
 
 
@@ -174,7 +266,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_TIMECHANGE
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::core::w;
 
 unsafe extern "system" fn wnd_proc(
     hwnd: HWND,
@@ -218,6 +309,39 @@ pub fn run_time_change_watcher() {
         while GetMessageW(&mut msg, Some(hwnd), 0, 0).into() {
             TranslateMessage(&msg).ok().unwrap();
             DispatchMessageW(&msg);
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! hklm_open_reg_key {
+    ($($key:expr),*) => {
+        let mut hkey = HKEY_LOCAL_MACHINE;
+        $(
+            let lpsubkey = w!($key);
+
+            RegOpenKeyW(hkey, lpsubkey, &raw mut hkey)
+        ),*
+
+    };
+}
+
+
+#[derive(Debug)]
+pub enum MyError {
+    HResult(String),
+    WMINotHRESULTError(WMIError)
+}
+
+impl From<WMIError> for MyError {
+    fn from(value: WMIError) -> Self {
+        match value {
+            WMIError::HResultError { hres } => {
+                let h_result = HRESULT(hres);
+
+                MyError::HResult(h_result.message())
+            }
+            other => MyError::WMINotHRESULTError(other)
         }
     }
 }

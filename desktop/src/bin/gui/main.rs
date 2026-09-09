@@ -7,12 +7,21 @@ use iced::widget::space;
 
 use interprocess::local_socket::{ConnectOptions, GenericNamespaced, Stream, ToNsName};
 
-use crate::APP_NAME;
+use desktop::APP_NAME;
 
-use crate::ipc::{IPCClientExt, Signal};
+use desktop::ipc::{IPCClientExt, Signal};
 
-pub use self::state::saved_data;
-use self::state::State;
+pub use self::state::State;
+
+
+pub fn main() {
+    iced::application(GUI::new, GUI::update, GUI::view)
+        .subscription(GUI::subscription)
+        .exit_on_close_request(false)
+        .run()
+        .unwrap();
+}
+
 
 enum Message {
     StateLoaded(State),
@@ -124,12 +133,4 @@ fn start_daemon() {
     Command::new(&daemon_exe).spawn().unwrap();
 
     println!("Starting daemon")
-}
-
-pub fn run() {
-    iced::application(GUI::new, GUI::update, GUI::view)
-        .subscription(GUI::subscription)
-        .exit_on_close_request(false)
-        .run()
-        .unwrap();
 }

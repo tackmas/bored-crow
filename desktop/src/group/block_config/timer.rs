@@ -1,20 +1,18 @@
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::mem;
 
-use chrono::{DateTime, FixedOffset, Local};
+use chrono::{DateTime, Local};
 
 use serde::{Deserialize, Serialize};
 
+use tokio::sync::oneshot;
 use tokio::task;
-use tokio::time::{self, Duration, Interval};
+use tokio::time::{self, Duration};
 
 use crate::platform::Blocker;
 
-use super::{App, CommonBlockInfo, Group, MoreLockConfig};
-use super::block_rule::LockWhenBlocked;
+use super::{Group, LockWhenBlocked, MoreLockConfig};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Timer {
     date_time: DateTime<Local>,
     duration: Duration,
@@ -36,25 +34,25 @@ impl Timer {
     pub fn when_done(&self) -> DateTime<Local> {
         self.date_time + self.duration
     }
-}
 
-impl Group {
-    pub(super) async fn block_with_timer(
-        self: Arc<Self>,
-        timer: Timer,
+    pub(super) async fn block_group(
+        self,
+        group: Arc<Group>,
         lock_when_blocked: LockWhenBlocked,
-        cbi: CommonBlockInfo,
+        blocker: Blocker,
+        unblocker_rx: oneshot::Receiver<()>
     ) {
         let now = Local::now();
 
-        let diff = timer.when_done() - now;
+        let diff = self.when_done() - now;
 
         if diff.num_seconds() > 0 {
-            if let Some(more_lock_config) = *lock_when_blocked {
-                self.lock(more_lock_config, &cbi.blocker);
+            if let Some(more_lock_config) = lock_when_blocked.flag {
+                group.lock(more_lock_config, &blocker);
             }
 
-            self.block_apps(&cbi.blocker).await;
+            let process_names = group.process_names.iter().cloned();
+            blocker.block_processes(process_names).await;
 
             let diff_std = diff
                 .to_std()
@@ -63,42 +61,41 @@ impl Group {
             println!("{diff_std:?}");
 
             task::spawn(async move {
-                let cbi = cbi;
-
                 tokio::select! {
-                    res = cbi.unblock_rx => {
+                    res = unblocker_rx => {
                         res.unwrap();
                     },
                     _ = time::sleep(diff_std) => {
                         println!("Block Timer completed")
                     }
                 }
-                if let Some(more_lock_config) = *lock_when_blocked {
-                    self.unlock(more_lock_config, &cbi.blocker);
+                if let Some(more_lock_config) = lock_when_blocked.flag {
+                    group.unlock(more_lock_config, &blocker);
                 } 
 
-                self.unblock_apps(&cbi.blocker).await;
+                let process_names = group.process_names.iter().cloned();
+                blocker.unblock_processes(process_names).await;
 
-                self.clear_unblocker();
+                group.clear_unblocker();
             });
 
         } else {
-            self.clear_unblocker();
+            group.clear_unblocker();
         }
     }
 
-    pub(super) async fn lock_with_timer(
-        &self, 
-        lock: Timer, 
+    pub(super) async fn lock_timer(
+        self, 
+        group: &Group, 
         more_lock_config: MoreLockConfig,
         blocker: &Blocker
     ) {
         let now = Local::now();
 
-        let diff = lock.when_done() - now;
+        let diff = self.when_done() - now;
 
         if diff.num_seconds() > 0 {
-            self.lock(more_lock_config, blocker);
+            group.lock(more_lock_config, blocker);
 
             println!("Locking");
 
@@ -110,7 +107,9 @@ impl Group {
 
             println!("Lock Timer completed");
 
-            self.unlock(more_lock_config, blocker);
+            group.unlock(more_lock_config, blocker);
         }
-    }
+    }    
 }
+
+

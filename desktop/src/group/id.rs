@@ -1,6 +1,8 @@
 use std::fmt::Display;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use serde::{Deserialize, Serialize};
+
 static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug)]
@@ -13,7 +15,7 @@ pub trait AsId {
     fn as_id(&self) -> Id;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct Id(usize);
 
 impl Id {

@@ -8,13 +8,15 @@ anyhow = "1.0.102"
 chrono = { version = "0.4.44", features = ["serde"] }
 directories = "6.0.0"
 futures = "0.3.32"
-iced = { version = "0.14.0", features = ["advanced", "tokio"] }
+iced = { version = "0.14.0", features = ["advanced", "image", "tokio"] }
 interprocess = { version = "2.4.2", features = ["tokio"] }
+notify = "8.2.0"
 rkyv = "0.8.16"
 screen_size = "0.1.0"
-serde = "1.0.228"
+serde = { version = "1.0.228", features = ["rc"] }
 serde_json = "1.0.149"
-sysinfo = "0.37.2"
+systemicons = "0.9.13"
+sysinfo = "0.39.6"
 tokio = { version = "1.52.1", features = ["fs", "io-util", "macros", "rt", "rt-multi-thread", "sync", "time"]}
 qsu = { version = "0.10.1", features = ["clap", "installer", "tokio"] }
 
@@ -30,7 +32,12 @@ windows = {
         "Win32_Foundation", 
         "Win32_Graphics_Gdi", 
         "Win32_System_LibraryLoader", 
+        "Win32_System_Registry",
         "Win32_UI_WindowsAndMessaging"
     ] 
 }
+wmi = "=0.18.4"
 winreg = "0.55.0"
+
+[patch.crates-io]
+sysinfo = { git = "https://github.com/tackmas/sysinfo.git", rev = "54b15fa5d79661357c68dd599381e4cdc919f0e1" }

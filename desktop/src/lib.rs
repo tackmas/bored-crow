@@ -1,7 +1,7 @@
-pub mod core;
-pub mod gui;
+pub mod group;
 pub mod ipc;
 pub mod platform;
+pub mod saved;
 pub mod macros;
 
 use std::sync::atomic::{AtomicUsize, Ordering};

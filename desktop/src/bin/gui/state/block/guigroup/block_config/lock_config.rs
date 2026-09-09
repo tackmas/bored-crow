@@ -17,11 +17,10 @@ use iced::widget::{
     text
 };
 
-use crate::core::block::block_rule::{LockConfig as CoreLockConfig, MoreLockConfig};
-use crate::core::block::timer::Timer;
-use crate::gui::state::{LENGTH_UNIT, Pad};
-use crate::gui::state::action;
-use crate::gui::state::modal::{self, radio_with_border, title};
+use desktop::group::{LockConfig as CoreLockConfig, MoreLockConfig, Timer};
+use crate::state::{LENGTH_UNIT, Pad};
+use crate::state::action;
+use crate::state::modal::{self, radio_with_border, title};
 
 use super::Tab;
 use super::timer;
@@ -62,7 +61,7 @@ impl LockConfig {
     pub fn new() -> Self {
         Self {
             lock_mode: LockMode::NoLock,
-            more_lock_config: MoreLockConfig::new(),
+            more_lock_config: MoreLockConfig::default(),
             gui_timer: super::timer::Timer::new(),
         }
     }
@@ -226,7 +225,7 @@ impl LockConfig {
         let title_bar = title("Additional configurations if locked", 20.0);
         let content = {
             let indent = Space::new().width(*LENGTH_UNIT * 2.0);
-            let content = self.more_lock_config.view();
+            let content = view(&self.more_lock_config);
 
             row![indent, content]
         };
@@ -269,33 +268,24 @@ pub enum LockMode {
     LockWhileBlocked,
     LockWithTimer,
 }
+fn view(more_lock_config: &MoreLockConfig) -> Element<'_, Message> {
+    let block_task_manager = checkbox_config(
+        more_lock_config.block_task_manager,
+        Message::ToggleBlockTaskManager,
+        "Block Task Manager"
+    );
 
-impl MoreLockConfig {
-    pub fn new() -> Self {
-        Self {
-            block_task_manager: false,
-            prohibit_uninstall: false,
-        }
-    }
-    pub fn view(&self) -> Element<'_, Message> {
-        let block_task_manager = checkbox_config(
-            self.block_task_manager,
-            Message::ToggleBlockTaskManager,
-            "Block Task Manager"
-        );
+    let prohibit_uninstall = checkbox_config(
+        more_lock_config.prohibit_uninstall, 
+        Message::ToggleProhibitUninstall,
+        "Prohibit uninstalling"
+    );
 
-        let prohibit_uninstall = checkbox_config(
-            self.prohibit_uninstall, 
-            Message::ToggleProhibitUninstall,
-            "Prohibit uninstalling"
-        );
-
-        column![
-            block_task_manager,
-            prohibit_uninstall
-        ]
-        .into()
-    }
+    column![
+        block_task_manager,
+        prohibit_uninstall
+    ]
+    .into()
 }
 
 fn checkbox_config<'a>(

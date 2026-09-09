@@ -8,14 +8,14 @@ use std::process::{self, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // External
-use tokio::runtime::Builder;
+use tokio::runtime::{Builder, LocalOptions, Runtime};
 use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
 
 use qsu::argp::{ArgParser, ArgsProc};
 use qsu::async_trait;
 use qsu::log;
-use qsu::rt::{Demise, InitCtx, RunCtx, RunEnv, SrvAppRt, SvcEvt, TermCtx, TokioServiceHandler};
+use qsu::rt::{Demise, InitCtx, RunCtx, RunEnv, SrvAppRt, SvcEvt, TermCtx, ServiceHandler};
 
 // Local
 
@@ -58,15 +58,20 @@ impl ArgsProc for Args {
         builder.enable_io();
         builder.enable_time();
 
-        let rtbldr = Some(builder);
-
         let (restart_tx, restart_rx) = mpsc::channel(1);
         let uninstall_tx = restart_tx.clone();
         runctx.init_passthrough_r(uninstall_tx);
 
         let svcevt_handler = Box::new(move |event| {
+            println!("{event:?}");
+
             if let SvcEvt::Shutdown(Demise::Terminated) = event {
+                log_to_file("Terminated");
                 let _ = restart_tx.blocking_send(Shutdown::Restart);
+            } else if let SvcEvt::Shutdown(Demise::Interrupted) = event {
+                log_to_file("Interuppted");
+            } else if let SvcEvt::Shutdown(Demise::ReachedEnd) = event {
+                log_to_file("ReachedEnd");
             }
         });
 
@@ -74,8 +79,7 @@ impl ArgsProc for Args {
             Daemon::new_with_shutdown_rx(restart_rx)
         );
 
-        Ok(SrvAppRt::Tokio {
-            rtbldr,
+        Ok(SrvAppRt::Sync {
             svcevt_handler,
             rt_handler
         })
@@ -87,62 +91,72 @@ pub struct AppError;
 
 struct Daemon {
     state: Option<State>,
+    runtime: Runtime,
     shutdown_rx: mpsc::Receiver<Shutdown>
 }
 
 impl Daemon {
     fn new_with_shutdown_rx(shutdown_rx: mpsc::Receiver<Shutdown>) -> Self {
+        let runtime = Builder::new_current_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .unwrap();
+
         Self {
             state: None,
+            runtime,
             shutdown_rx
         }
     }
 
-    async fn load_state(&mut self, uninstall_tx: mpsc::Sender<Shutdown>) {
-        self.state = Some(State::load(uninstall_tx).await);
+    async fn load_state(state: &mut Option<State>, uninstall_tx: mpsc::Sender<Shutdown>) {
+        *state = Some(State::load(uninstall_tx).await);
     }
 }
 
-#[async_trait]
-impl TokioServiceHandler for Daemon {
+impl ServiceHandler for Daemon {
     type AppErr = AppError;
 
-    async fn init(&mut self, ictx: &mut InitCtx) -> Result<(), AppError> {
+    fn init(&mut self, ictx: &mut InitCtx) -> Result<(), AppError> {
         log_to_file("init() called");
 
         let uninstall_tx = ictx
             .take()
             .expect("`RunCtx` in `ArgsProc::build_apprt` should always pass a `mpsc::Sender<Shutdown>`");
 
-        self.load_state(uninstall_tx).await;
-
+        self.runtime.block_on(Self::load_state(&mut self.state, uninstall_tx));
+    
         log_to_file("init() done");
 
         Ok(())
     }
 
-    async fn run(&mut self, _re: &RunEnv) -> Result<(), AppError> {
+    fn run(&mut self, _re: &RunEnv) -> Result<(), AppError> {
         println!("a");
         log_to_file("run() started");
         let state = self.state.as_mut().unwrap();
 
-        tokio::select! {
-            _ = state.run() => { log_to_file("state.run() finished"); },
-            shutdown = self.shutdown_rx.recv() => { 
-                let shutdown = shutdown
-                    .expect("`Sender` should always outlive `Reciever`");
+        self.runtime.block_on(async {
+            tokio::select! {
+                _ = state.run() => { log_to_file("state.run() finished"); },
+                shutdown = self.shutdown_rx.recv() => { 
+                    let shutdown = shutdown
+                        .expect("`Sender` should always outlive `Reciever`");
 
-                log_to_file("shutdown signal received");
+                    log_to_file("shutdown signal received");
 
-                on_shutdown(shutdown)
-            }
-        }
+                    on_shutdown(shutdown)
+                }
+            }           
+        });
+
 
         log_to_file("run() returning");
         Ok(())
     }
 
-    async fn shutdown(&mut self, _tctx: &mut TermCtx) -> Result<(), AppError> {
+    fn shutdown(&mut self, _tctx: &mut TermCtx) -> Result<(), AppError> {
         // Useless function
 
         Ok(())
@@ -180,3 +194,6 @@ fn log_to_file(msg: &str) {
         .unwrap();
     writeln!(file, "{}", msg).unwrap();
 }
+
+
+

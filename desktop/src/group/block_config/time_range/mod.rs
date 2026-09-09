@@ -1,5 +1,5 @@
-pub mod custom;
-pub mod uniform;
+mod custom;
+mod uniform;
 
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -18,6 +18,7 @@ use chrono::{
 
 use serde::{Deserialize, Serialize};
 
+use tokio::sync::oneshot;
 use tokio::task;
 use tokio::time::{self, Duration};
 
@@ -26,7 +27,7 @@ use crate::platform::Blocker;
 pub use self::custom::{CustomWeek, TimeRangesOnWeek};
 pub use self::uniform::UniformWeekdays;
 
-use super::{CommonBlockInfo, Group, LockWhenBlocked};
+use super::{Group, LockWhenBlocked};
 use super::LockConfig;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -108,38 +109,33 @@ impl<T: WeekScheduleT> WeekSchedule<T> {
             if_pre_start_time(until_start_unsigned).await
         }
     }
-}
 
-
-impl Group {
-    pub(super) async fn block_with_time_range<T>(
-        self: Arc<Self>,
-        week_schedule: WeekSchedule<T>,
+    pub(super) async fn block_with_time_range(
+        self,
+        group: Arc<Group>,
         lock_config: LockConfig,
-        cbi: CommonBlockInfo,
+        blocker: Blocker,
+        unblocker_rx: oneshot::Receiver<()>
     ) 
     where 
         T: WeekScheduleT
     {
-        let CommonBlockInfo {
-            blocker,
-            unblock_rx,
-        } = cbi;
-
-        let lock_when_blocked = self.lock_when_blocked(lock_config, &blocker);
 
         let empty_closure1 = async || {};
         let empty_closure2 = async |_| {};
 
+        let lock_when_blocked = lock_config.into_lock_when_blocked(&group, &blocker);
+
         let init_block = async || {
-            if let Some(more_lock_config) = *lock_when_blocked {
-                self.lock(more_lock_config, &blocker);
+            if let Some(more_lock_config) = lock_when_blocked.flag {
+                group.lock(more_lock_config, &blocker);
             } 
 
-            self.block_apps(&blocker).await;
+            let process_names = group.process_names.iter().cloned();
+            blocker.block_processes(process_names).await;
         };
 
-        week_schedule.logic(empty_closure2, init_block, empty_closure1).await;
+        self.logic(empty_closure2, init_block, empty_closure1).await;
 
         task::spawn(async move {
             let run_block = async { loop {
@@ -148,19 +144,19 @@ impl Group {
                     _until_start, 
                     until_start_unsigned, 
                     time_range_duration
-                ) = get_common_info(&week_schedule);
+                ) = get_common_info(&self);
 
                 let if_pre_start_time = async |until_start_unsigned: Duration| {
                     time::sleep(until_start_unsigned).await;
 
-                    self.block_until_unblock(time_range_duration, &blocker, lock_when_blocked)
+                    block_until_unblock(&group, time_range_duration, &blocker, lock_when_blocked)
                         .await;  
                 };
 
                 let if_inside_time_range = async || {
                     let until_end = time_range_duration - until_start_unsigned;
 
-                    self.block_until_unblock(until_end, &blocker, lock_when_blocked).await;
+                    block_until_unblock(&group, until_end, &blocker, lock_when_blocked).await;
                 };
 
                 let if_post_end_time = async || {
@@ -169,40 +165,40 @@ impl Group {
                     time::sleep(until_midnight).await;
                 };
 
-                week_schedule.logic(if_pre_start_time, if_inside_time_range, if_post_end_time).await;
+                self.logic(if_pre_start_time, if_inside_time_range, if_post_end_time).await;
             }};
 
             tokio::select! {
-                result = unblock_rx => {
+                result = unblocker_rx => {
                     result.unwrap();
 
-                    self.unblock_apps(&blocker).await;
+                    let process_names = group.process_names.iter().cloned();
+                    blocker.unblock_processes(process_names).await;
                 },
                 _ = run_block => {}
             }
         });
-    }
-
-    async fn block_until_unblock(
-        &self,
-        until_unblock: Duration,
-        blocker: &Blocker,
-        lock_when_blocked: LockWhenBlocked,
-    ) {
-        if let Some(more_lock_config) = *lock_when_blocked {
-            self.lock(more_lock_config, blocker);
-        } 
-        self.block_apps(blocker).await;
-
-        time::sleep(until_unblock).await;
-
-        if let Some(more_lock_config) = *lock_when_blocked {
-            self.unlock(more_lock_config, blocker);
-        } 
-
-        self.block_apps(blocker).await;
-    }
+    }   
 }
+
+async fn block_until_unblock(
+    group: &Group, block_duration: Duration, blocker: &Blocker, lock_when_blocked: LockWhenBlocked
+) {
+    if let Some(more_lock_config) = lock_when_blocked.flag {
+        group.lock(more_lock_config, blocker);
+    } 
+    let process_names = group.process_names.iter().cloned();
+    blocker.block_processes(process_names.clone()).await;
+
+    time::sleep(block_duration).await;
+
+    if let Some(more_lock_config) = lock_when_blocked.flag {
+        group.unlock(more_lock_config, blocker);
+    } 
+
+    blocker.unblock_processes(process_names).await;    
+}
+
 
 fn get_common_info<T>(week_schedule: &WeekSchedule<T>) -> (NaiveTime, TimeDelta, Duration, Duration) 
 where 

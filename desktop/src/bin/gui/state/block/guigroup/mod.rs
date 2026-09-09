@@ -15,14 +15,16 @@ use iced::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    core::block::{BlockConfig, Group, SavedGroup},
+use desktop::{
     platform::{App, Blocker},
     unwrap_variant,
 };
 
-use crate::core::block::id::{AsId, Id};
-use crate::gui::state::{action, button_with_text, Route, SCREEN_SIZE};
+use desktop::group::{AsId, BlockConfig, BlockRuleKind, Group, Id};
+use desktop::platform::ProcessName;
+use desktop::saved::Group as SavedGroup;
+
+use crate::state::{action, button_with_text, Route, SCREEN_SIZE};
 
 use super::manage_guigroup::{self as m_gg, ManageGroup};
 
@@ -75,35 +77,46 @@ impl GUIGroup {
             block_config: b_c::BlockConfig::new(),
         }
     }
-    pub fn from_manage_group(manage_group: ManageGroup, id: Id) -> Self {
-        let (name, all_apps, apps_i) = manage_group.into_parts();
-        let apps_i: Vec<usize> = apps_i.into_iter().collect();
+    pub fn new_with_new_guigroup(new_guigroup: ManageGroup) -> Self {
+        let (group_name, selected_process_names) = new_guigroup.into_parts();
 
-        let group = Group::from_apps_i(apps_i, all_apps, id);
-        let group = Arc::new(group);
+        let group = Arc::new(
+            Group::new_with_process_names(selected_process_names)
+        );
 
         Self {
+            name: group_name,
             modal: None,
-            name,
-            group: group.clone(),
+            group,
             is_blocked: false,
-            block_config: b_c::BlockConfig::new(),
+            block_config: b_c::BlockConfig::new()
         }
     }
 
-    pub async fn from_saved(saved: SavedGUIGroup, all_apps: Arc<[App]>, blocker: &Blocker) -> Self {
-        let group = Group::from_saved(saved.group, all_apps, blocker).await;
+    pub async fn from_saved(saved_group: SavedGroup, blocker: &Blocker) -> Self {
+        let group = Group::from_saved(&saved_group, blocker).await;
         let is_blocked = group.is_blocked();
 
-        let guigroup = Self {
+        Self {
             modal: None,
-            name: saved.name,
+            name: saved_group.name,
             group: group.clone(),
             is_blocked,
             block_config: b_c::BlockConfig::new(),
-        };
+        }
+    }
+    pub fn into_saved_group(&self, block_rule_kind: Option<BlockRuleKind>) -> SavedGroup {
+        let apps = self.group.process_names
+            .iter()
+            .map(|process_name| String::from(process_name.0.as_ref()))
+            .collect();
 
-        guigroup
+        SavedGroup {
+            id: self.as_id(),
+            name: self.name.clone(),
+            apps,
+            block_config: block_rule_kind
+        }
     }
     // all_guigroups are two slices that contains every GUIGroup, except self
     // This is to avoid having a mutable and immutable reference to self.
@@ -133,7 +146,7 @@ impl GUIGroup {
                         return Action::none();
                     }
 
-                    let edit_guigroup = m_gg::ManageGroup::from_guigroup(&*self);
+                    let edit_guigroup = m_gg::ManageGroup::from(self.name.clone(), &self.group.process_names);
                     self.modal = Some(Modal::EditSelf(edit_guigroup));
 
                     Action::none().open_modal()
@@ -199,16 +212,27 @@ impl GUIGroup {
     fn handle_m_gg_action(&mut self, mut action: m_gg::Action) -> Action {
         match action.custom_opt.take() {
             None => action.with_custom(None),
-            Some(m_gg::CustomAction::Close) => {
+            Some(m_gg::CA::Close) => {
                 self.modal = None;
 
                 action.with_custom(None).close_modal()
             }
-            Some(m_gg::CustomAction::Save) => {
-                let modal = self.modal.take().unwrap();
+            Some(m_gg::CA::Save) => {
+                let modal = self.modal
+                    .take()
+                    .expect("self.modal must be Some(Modal::EditSelf(ManageGroup)) \
+                    if this function is called since the action is from ManageGroup::update(&mut self)");
+
                 let edit_guigroup = unwrap_variant!(modal, Modal::EditSelf => yo);
 
-                *self = GUIGroup::from_manage_group(edit_guigroup, self.group.id);
+                let (group_name, selected_process_names) = edit_guigroup.into_parts();
+
+                self.name = group_name;
+
+                let group_as_mut = Arc::get_mut(&mut self.group)
+                    .expect("Editing the group means the group is not currently being blocked, \
+                        therefore the blocker side doesn't have a Arc to the group");
+                group_as_mut.process_names = selected_process_names;
 
                 action.with_custom(None).close_modal().save()
             }
@@ -315,6 +339,8 @@ impl AsId for GUIGroup {
     }
 }
 
+/*
+
 #[derive(Serialize, Deserialize)]
 pub struct SavedGUIGroup {
     pub name: String,
@@ -325,8 +351,9 @@ impl SavedGUIGroup {
     pub fn from_guigroup(guigroup: &GUIGroup, block_rule_opt: Option<BlockConfig>) -> Self {
         SavedGUIGroup {
             name: guigroup.name.clone(),
-            group: SavedGroup::new(&guigroup.group, block_rule_opt),
+            group: SavedGroup::from(&guigroup.group, block_rule_opt),
         }
     }
 }
 
+*/

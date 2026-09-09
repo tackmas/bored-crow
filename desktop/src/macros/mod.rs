@@ -19,6 +19,25 @@ macro_rules! wrapper_with_deref {
     };
 }
 
+#[macro_export]
+macro_rules! impl_deref_mut_for_newtype {
+    ($newtype_to_impl:ty, $target:ty) => {
+        impl std::ops::Deref for $newtype_to_impl {
+            type Target = $target;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+        
+        impl std::ops::DerefMut for $newtype_to_impl {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }       
+    };
+}
+
 macro_rules! inner {
     ($($inner:expr),*) => {
         inner
