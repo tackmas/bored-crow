@@ -13,7 +13,6 @@ use desktop::ipc::{IPCClientExt, Signal};
 
 pub use self::state::State;
 
-
 pub fn main() {
     iced::application(GUI::new, GUI::update, GUI::view)
         .subscription(GUI::subscription)
