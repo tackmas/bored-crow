@@ -1,5 +1,5 @@
 mod guigroup;
-mod manage_guigroup;
+mod group_editor;
 
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ use desktop::saved::{Group as SavedGroup, Saved};
 use crate::state::{action, handle_modal_action, Route, SCREEN_SIZE};
 
 use guigroup::GUIGroup;
-use manage_guigroup as m_gg;
+use group_editor::{self as g_e, GroupEditor};
 
 pub enum CustomAction {
     Block(Arc<Group>, BlockConfig),
@@ -41,13 +41,13 @@ pub type Action = action::Action<CA, Message>;
 
 #[derive(Clone)]
 pub enum Message {
-    NewGUIGroup(Route<m_gg::Message>),
+    NewGUIGroup(Route<g_e::Message>),
     GUIGroup(usize, guigroup::Message),
 }
 
 pub enum Modal {
     GUIGroup(usize),
-    NewGUIGroup(m_gg::ManageGroup),
+    NewGUIGroup(GroupEditor),
 }
 
 pub struct BlockState {
@@ -112,7 +112,7 @@ impl BlockState {
                 }
                 (None, Route::Forward(_)) => Action::none(),
                 (None, Route::Open(())) => {
-                    let new_guigroup = m_gg::ManageGroup::new();
+                    let new_guigroup = GroupEditor::new();
                     self.modal = Some(Modal::NewGUIGroup(new_guigroup));
 
                     Action::none().open_modal()
@@ -148,15 +148,15 @@ impl BlockState {
         .map_task(move |msg| Message::GUIGroup(i, msg))
     }
 
-    fn handle_m_gg_action(&mut self, mut action: m_gg::Action) -> Action {
+    fn handle_m_gg_action(&mut self, mut action: g_e::Action) -> Action {
         match action.custom_opt.take() {
             None => action.with_custom(None),
-            Some(m_gg::CA::Close) => {
+            Some(g_e::CA::Close) => {
                 self.modal = None;
 
                 action.with_custom(None).close_modal()
             }
-            Some(m_gg::CA::Save) => {
+            Some(g_e::CA::Save) => {
                 let new_guigroup = {
                     let modal = self.modal.take().unwrap();
 

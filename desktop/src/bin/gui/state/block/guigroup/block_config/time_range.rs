@@ -20,7 +20,7 @@ use iced::widget::{
     tooltip,
 };
 
-use crate::make_semi_transparent;
+use crate::make_uninteractable;
 use desktop::group::{
     BlockRuleKind, CustomWeek, LockConfig, TimeRange, 
     TimeRangesOnWeek, UniformWeekdays, WeekSchedule
@@ -293,7 +293,7 @@ wheras Uniform Mode has the same time range on all days",
                 time_range_pick_list2(time_range, on_selected);
 
             if !is_toggled {
-                (start, hyphen_seperator, end) = make_semi_transparent!(
+                (start, hyphen_seperator, end) = make_uninteractable!(
                     start, hyphen_seperator, end; Element<_>
                 );
             }

@@ -1,9 +1,14 @@
+mod apps_tab;
+mod websites_tab;
+
 // STD
 use std::cmp::Ordering;
 use std::{collections::HashSet, sync::Arc};
 use std::hash::{Hash, Hasher};
 
 // Dependencies
+use bytes::Bytes;
+
 use iced::advanced::text::{Fragment, IntoFragment};
 use iced::{
     self, Background, Color, Element, Length, Task,
@@ -23,7 +28,10 @@ use tokio::time::{Duration, sleep};
 use desktop::platform::ProcessName;
 use crate::state::{Action as BaseAction, LENGTH_UNIT};
 
+use self::apps_tab::{AppsTab, self as a_t};
+
 use super::guigroup::GUIGroup;
+
 
 pub enum CustomAction {
     Close,
@@ -44,9 +52,8 @@ enum UIError {
 pub enum Message {
     Close,
     Save,
+    AppsTab(a_t::Message),
     TabSelected(Tab),
-    Select(ProcessName),
-    Unselect { idx: usize },
     GroupNameInput(String),
     DisplayError(UIError),
     HideError,
@@ -60,45 +67,30 @@ enum Tab {
 }
 
 
-pub struct ManageGroup {
+pub struct GroupEditor {
     group_name: String,
     selected_tab: Tab,
-    all_processes: Vec<ProcessInfo>,
-    selected_process_indices: Vec<u8>,
+    apps_tab: AppsTab,
     error: Option<UIError>,
 }
 
-impl ManageGroup {
+impl GroupEditor {
     pub fn new() -> Self {
         Self {
             group_name: String::new(),
             selected_tab: Tab::default(),
-            all_processes: all_processes(),
-            selected_process_indices: Vec::new(),
+            apps_tab: AppsTab::new(),
             error: None
         }
     }
     pub fn from(group_name: String, selected_processes: &Vec<ProcessName>) -> Self {
-        let all_processes = all_processes();
-        let selected_process_indices = selected_processes
-            .iter()
-            .map(|process_name| )
 
-        Self {
-            group_name,
-            selected_process_names,
-            error: None,
-        }
+        todo!()
     }
 
     pub fn into_parts(self) -> (String, Vec<ProcessName>) {
-        let ManageGroup {
-            group_name,
-            selected_process_names,
-            ..
-        } = self;
 
-        (group_name, selected_process_names)
+        todo!()
     }
     // all_other_names are all group names except self
     #[must_use]
@@ -119,22 +111,28 @@ impl ManageGroup {
                     return handle_display_error(&mut self.error, UIError::GroupNameAlreadyExists);
                 }
 
+                /*
+
                 if self.selected_process_names.is_empty() {
                     return handle_display_error(&mut self.error, UIError::NoProcessSelected);
                 }
 
+                */
+
                 Action::none_with_custom(CA::Save)
+            }
+            Message::AppsTab(apps_tab_msg) => {
+                let _action = self.apps_tab.update(apps_tab_msg);
+
+                Action::none()
+            }
+            Message::TabSelected(selected_tab) => {
+                self.selected_tab = selected_tab;
+
+                Action::none()
             }
             Message::GroupNameInput(input) => {
                 self.group_name = input;
-                Action::none()
-            }
-            Message::Select(process_name) => {
-                self.selected_process_names.push(process_name);
-                Action::none()
-            }
-            Message::Unselect { idx } => {
-                self.selected_process_names.remove(idx);
                 Action::none()
             }
             Message::DisplayError(ui_error) => {
@@ -152,11 +150,13 @@ impl ManageGroup {
 
     pub fn view(&self) -> Element<'_, Message> {
         let group_name = self.group_name();
-        let app_list = self.app_list();
+        let tab_selection = self.tab_selection();
+        let apps_tab_content = self.apps_tab_content();
 
         let centered_x = {
             let x_space = || space().width(Length::FillPortion(1));
-            let content = column![group_name, app_list].width(Length::FillPortion(8));
+            let content = column![group_name, tab_selection, apps_tab_content]
+                .width(Length::FillPortion(8));
 
             row![x_space(), content, x_space()]
         };
@@ -205,9 +205,10 @@ impl ManageGroup {
     }
 
     fn apps_tab_content(&self) -> Element<'_, Message> {
-        todo!()
+        self.apps_tab.view().map(Message::AppsTab)
     }
 
+    /*
     fn app_list(&self) -> Element<'_, Message> {
         let rows = self.all_processes
             .into_iter()
@@ -246,6 +247,7 @@ impl ManageGroup {
 
         scrollable.into()
     }
+    */
 
     fn save_button(&self) -> Element<'_, Message> {
         let text = Text::new("Save");
@@ -336,6 +338,28 @@ fn process_logo(process: &Process) -> Image {
     Image::new(handle)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct App {
+    name: String,
+    exe_path: String,
+    icon: Bytes
+}
+
+impl App {
+    fn from(name: String, exe_path: String, icon: Bytes) -> Self {
+        Self {
+            name,
+            exe_path,
+            icon
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Website {
+    name: String
+}
+
 struct ProcessInfo {
     logo: Image,
     name: ProcessName
@@ -395,7 +419,9 @@ fn all_processes() -> Vec<ProcessInfo> {
         .into_iter()
         .collect();
 
-    all_processes.sort_by(|a, b| ordering_by_alphabetical(&a.name, &b.name))
+    all_processes.sort_by(|a, b| ordering_by_alphabetical(&a.name, &b.name));
+
+    all_processes
 }
 
 fn ordering_by_alphabetical(a: &str, b: &str) -> Ordering {

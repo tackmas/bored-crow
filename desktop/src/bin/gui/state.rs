@@ -331,29 +331,27 @@ where
 
 
 #[macro_export]
-macro_rules! make_semi_transparent {
+macro_rules! make_uninteractable {
     ($($element:expr),+; $into_type:ty) => {
         ( $({
-            let semi_transparent_layer = container(
-                space().width(Length::Fill).height(Length::Fill)
+            let semi_transparent_layer = iced::widget::container(
+                iced::widget::space().width(Length::Fill).height(Length::Fill)
             )                           
             .style(|_theme| {
-                use container::Style;
-
-                Style {
+                iced::widget::container::Style {
                     background: Some(
-                        Background::Color(Color {
+                        iced::Background::Color(iced::Color {
                             a: 0.4,
-                            ..Color::WHITE
+                            ..iced::Color::WHITE
                         })
                     ),
-                    ..Style::default()
+                    ..iced::widget::container::Style::default()
                 }
             });
 
-            let opaque = opaque(semi_transparent_layer);
+            let opaque = iced::widget::opaque(semi_transparent_layer);
 
-            let stack = stack![
+            let stack = iced::widget::stack![
                 $element,
                 opaque
             ];

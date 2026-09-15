@@ -58,7 +58,7 @@ impl State {
 
         local_set.run_until(async {
             tokio::task::spawn_local(async {
-                service_deletion_event_listener().await;
+                // service_deletion_event_listener().await;
             });   
 
             self.ipc_listener().await;

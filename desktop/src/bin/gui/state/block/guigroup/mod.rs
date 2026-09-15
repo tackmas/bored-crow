@@ -26,7 +26,7 @@ use desktop::saved::Group as SavedGroup;
 
 use crate::state::{action, button_with_text, Route, SCREEN_SIZE};
 
-use super::manage_guigroup::{self as m_gg, ManageGroup};
+use super::group_editor::{self as g_e, GroupEditor};
 
 use block_config as b_c;
 
@@ -41,14 +41,14 @@ pub type Action = action::Action<CA, Message>;
 #[derive(Clone)]
 pub enum Message {
     Delete,
-    EditGUIGroup(Route<m_gg::Message>),
+    EditGUIGroup(Route<g_e::Message>),
     BlockConfig(b_c::Message),
     Block,
     Unblock,
 }
 
 pub enum Modal {
-    EditSelf(ManageGroup),
+    EditSelf(GroupEditor),
     BlockConfig,
 }
 
@@ -77,7 +77,7 @@ impl GUIGroup {
             block_config: b_c::BlockConfig::new(),
         }
     }
-    pub fn new_with_new_guigroup(new_guigroup: ManageGroup) -> Self {
+    pub fn new_with_new_guigroup(new_guigroup: GroupEditor) -> Self {
         let (group_name, selected_process_names) = new_guigroup.into_parts();
 
         let group = Arc::new(
@@ -146,7 +146,7 @@ impl GUIGroup {
                         return Action::none();
                     }
 
-                    let edit_guigroup = m_gg::ManageGroup::from(self.name.clone(), &self.group.process_names);
+                    let edit_guigroup = GroupEditor::from(self.name.clone(), &self.group.process_names);
                     self.modal = Some(Modal::EditSelf(edit_guigroup));
 
                     Action::none().open_modal()
@@ -209,15 +209,15 @@ impl GUIGroup {
         .map_task(Message::BlockConfig)
     }
 
-    fn handle_m_gg_action(&mut self, mut action: m_gg::Action) -> Action {
+    fn handle_m_gg_action(&mut self, mut action: g_e::Action) -> Action {
         match action.custom_opt.take() {
             None => action.with_custom(None),
-            Some(m_gg::CA::Close) => {
+            Some(g_e::CA::Close) => {
                 self.modal = None;
 
                 action.with_custom(None).close_modal()
             }
-            Some(m_gg::CA::Save) => {
+            Some(g_e::CA::Save) => {
                 let modal = self.modal
                     .take()
                     .expect("self.modal must be Some(Modal::EditSelf(ManageGroup)) \
