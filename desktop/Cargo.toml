@@ -10,6 +10,7 @@ chrono = { version = "0.4.44", features = ["serde"] }
 directories = "6.0.0"
 futures = "0.3.32"
 iced = { version = "0.14.0", features = ["advanced", "image", "tokio"] }
+image = "0.25.10"
 interprocess = { version = "2.4.2", features = ["tokio"] }
 notify = "8.2.0"
 rkyv = "0.8.16"
@@ -46,6 +47,7 @@ windows = {
         "Win32_UI_WindowsAndMessaging"
     ] 
 }
+windows-icons = "0.4.0"
 wmi = "=0.18.4"
 winreg = "0.55.0"
 

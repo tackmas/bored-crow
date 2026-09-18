@@ -1,13 +1,24 @@
+//! This module exclusively uses the `W`-suffixed (wide) variants of Windows API
+//! functions (e.g. `CreateFileW`, `GetModuleFileNameW`). As a result, all string
+//! buffers exchanged with the OS in this module are UTF-16 and can be assumed
+//! to decode validly
+
+use std::io::Write;
+use std::error::Error;
 use std::ffi::OsStr;
-use std::fs::{self, DirEntry};
+use std::fs::{self, DirEntry, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::ptr::{null_mut};
 
 use bytes::Bytes;
 
+use iced::widget::image::Handle;
+
+use image::imageops::{self, FilterType};
+
 use win32_version_info::VersionInfo;
 
-use windows::core::{BOOL, Error, HSTRING, Interface, PCWSTR, PWSTR, w, Result as WinResult};
+use windows::core::{BOOL, Error as WinError, HSTRING, Interface, PCWSTR, PWSTR, w, Result as WinResult};
 use windows::Win32::Foundation::{CloseHandle, HWND, MAX_PATH, LPARAM};
 use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
 use windows::Win32::System::Com::{
@@ -26,6 +37,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GWL_EXSTYLE, IsWindowVisible, WS_EX_TOOLWINDOW
 };
 
+use windows_icons::IconSize;
 
 use super::{App, IncorporableApp, IncorporableApps};
 
@@ -56,7 +68,15 @@ pub fn list_installed_apps() -> Vec<IncorporableApp> {
             };
 
             if extension == Some(OsStr::new("lnk")) {
-                if_lnk(path_buf, &file_name, apps);
+                let lnk_name = {
+                    let as_path: &Path = file_name.as_ref();
+
+                    as_path.file_prefix().expect(
+                        "A prefix always exists since it is derived from a valid, existing entry"
+                    )
+                };
+
+                handle_lnk(path_buf, &lnk_name, apps);
             } else if is_relevant_dir(entry, &file_name) {
                 recursive(path_buf, apps);
             }
@@ -66,87 +86,59 @@ pub fn list_installed_apps() -> Vec<IncorporableApp> {
     }
 
     // COM must be initialized on the calling thread. Otherwise the function will not work
-    fn if_lnk(path_to_lnk: &Path, lnk_name: &OsStr, incorporable_apps: &mut Vec<IncorporableApp>) {
+    fn handle_lnk(path_to_lnk: &Path, lnk_name: &OsStr, incorporable_apps: &mut Vec<IncorporableApp>) {
         unsafe {
-            // Create the ShellLink COM object, ask for the IShellLinkW interface.
-            let Ok(shell_link): WinResult<IShellLinkW> = 
-                CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) else { return; };
+            let exe_path = {
+                // Create the ShellLink COM object, ask for the IShellLinkW interface.
+                let Ok(shell_link): WinResult<IShellLinkW> = 
+                    CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) else { return; };
 
-            // Load the .lnk file's bytes via IPersistFile.
-            let Ok(persist_file): WinResult<IPersistFile> = 
-                shell_link.cast() else { return; };
+                // Load the .lnk file's bytes via IPersistFile.
+                let Ok(persist_file): WinResult<IPersistFile> = 
+                    shell_link.cast() else { return; };
 
-            let wide_path = HSTRING::from(path_to_lnk);
-            let res = persist_file.Load(PCWSTR(wide_path.as_ptr()), STGM_READ);
-            if res.is_err() {
-                return;
-            }
+                let wide_path = HSTRING::from(path_to_lnk);
+                if let Err(err) = persist_file.Load(PCWSTR(wide_path.as_ptr()), STGM_READ) {
+                    eprintln!("Error loading into IPersistFile: {err}");
+                    return;
+                }
 
-            // Resolve the shell link in case is has been renamed/moved
-            let no_dialog_window = HWND(null_mut());
-            let res = shell_link.Resolve(no_dialog_window, 0);
-            if res.is_err() {
-                return;
-            }
+                // Resolve the shell link in case is has been renamed/moved
+                let no_dialog_window = HWND(null_mut());
+                if let Err(err) = shell_link.Resolve(no_dialog_window, 0) {
+                    eprintln!("Error resolving shell link: {err}");
+                    return;
+                }
 
-            let mut buf = [0u16; MAX_PATH as usize];
-            let no_additional_data = null_mut();
-            let default_path_info_flag = 0;
-            let res = shell_link.GetPath(&mut buf, no_additional_data, default_path_info_flag);
-            if res.is_err() {
-                return;
-            }
+                let mut exe_path_buf = [0u16; MAX_PATH as usize];
+                let no_additional_data = null_mut();
+                let default_path_info_flag = 0;
+                if let Err(err) = shell_link.GetPath(&mut exe_path_buf, no_additional_data, default_path_info_flag) {
+                    eprintln!("Error getting path: {err}");
+                    return;
+                }
+                
+                // Find the length of the path (UTF-16)
+                let path_len = exe_path_buf.iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(exe_path_buf.len());
 
-            // Find the length of the path (UTF-16)
-            let len = buf.iter()
-                .position(|&c| c == 0)
-                .unwrap_or(buf.len());
-
-            let exe_extension = w!(".exe");
-            let Some(extension_idx) = len.checked_sub(exe_extension.len()) else {
-                return;
-            };
-
-            if buf[extension_idx..len] != *exe_extension.as_wide() {
-                return;
-            }
-
-            let exe_path_already_exists = {
-                let exe_path_as_chars = {
-                    let exe_path_reverse_iter = buf[0..len]
-                        .iter().rev().copied();
-
-                    char::decode_utf16(exe_path_reverse_iter)
-                        .map(|decode_utf16_res| decode_utf16_res.expect(
-                            "Should be valid UTF-16 since we use IShellLinkW which uses UTF-16"
-                        ))
+                let exe_extension = w!(".exe");
+                let Some(extension_idx) = path_len.checked_sub(exe_extension.len()) else {
+                    return;
                 };
 
-                incorporable_apps
-                    .iter()
-                    .all(|incorporable_app| incorporable_app.inner
-                        .exe_path
-                        .chars()
-                        .rev()
-                        .eq(exe_path_as_chars.clone())
-                    )
+                if !exe_path_buf[0..path_len].ends_with(w!(".exe").as_wide()) 
+                || exe_path_already_exists(incorporable_apps, &exe_path_buf, path_len) {
+                    return;
+                }
+
+                String::from_utf16_lossy(&exe_path_buf[..path_len])
             };
 
-            if exe_path_already_exists {
-                return;
-            }
-
-            /* 
-            let non_installed_apps_directory = w!(r"C:\Windows");
-
-            // SAFETY: `non_installed_apps_directory` pointer must not be mutated after creation
-            if buf[0..len].starts_with(non_installed_apps_directory.as_wide()) {
-                return;
-            }
-            */
-
-            // FIXME: return default icon if Err
-            let icon_in_bytes = match fetch_icon_in_bytes(&path_to_lnk.to_string_lossy()) {
+            // FIXME: return default icon if Err. also optimzation maybe available; this function
+            // is expensive as hell
+            let icon = match fetch_icon_in_bytes2(exe_path.as_ref()) {
                 Ok(icon_in_bytes) => icon_in_bytes,
                 Err(err) => {
                     eprintln!("Error getting icon from lnk;\nPath to lnk: {path_to_lnk:?};\nErr: {err:?}");
@@ -155,10 +147,11 @@ pub fn list_installed_apps() -> Vec<IncorporableApp> {
                 }               
             };
 
-            let lnk_target_abs_path = String::from_utf16_lossy(&buf[..len]);
-            let lnk_name = lnk_name.to_string_lossy().to_string();
+            let name = lnk_name
+                .to_string_lossy()
+                .to_string();
 
-            let app = App::from(lnk_name, lnk_target_abs_path, icon_in_bytes);
+            let app = App::from(name, exe_path, icon);
             let incorporable_app = IncorporableApp::new_with(app);
 
             incorporable_apps.push(incorporable_app);
@@ -173,7 +166,7 @@ pub fn list_installed_apps() -> Vec<IncorporableApp> {
 
     unsafe { CoUninitialize(); }
 
-    incorporable_apps.sort_by(|a, b| a.inner.name.cmp(&b.inner.name));
+    incorporable_apps.sort_by(|a, b| desktop::ordering_by_alphabetical(&a.inner.name, &b.inner.name));
 
     incorporable_apps
 }
@@ -191,18 +184,67 @@ fn is_relevant_dir(dir_entry: DirEntry, file_name: &OsStr) -> bool {
     }
 }
 
-fn fetch_icon_in_bytes(path_to_icon: &str) -> Result<Bytes, systemicons::Error> {
-    match systemicons::get_icon(path_to_icon, 32) {
-        Ok(icon_in_vec_of_bytes) => Ok(Bytes::from(icon_in_vec_of_bytes)),
-        Err(err) => Err(err)
-    }       
+fn fetch_icon_in_bytes(path_to_icon: &str, name: &str) -> Result<Bytes, systemicons::Error> {
+    systemicons::get_icon(path_to_icon, 32)
+        .map(|bytes| {
+            if name == "7-Zip File Manager" {
+                OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open("C:\\ttttdebug.png")
+                    .unwrap()
+                    .write_all(&bytes)
+                    .unwrap();                
+            }
+
+            Bytes::from(bytes)
+        })
 }
 
-pub fn list_running_apps(incorporable_apps: &mut IncorporableApps) {
+fn fetch_icon_in_bytes2(path_to_icon: &Path) -> Result<Handle, Box<dyn Error>> {
+    windows_icons::get_icon_by_path_with_size(path_to_icon, IconSize::Small)
+        .map(|icon| {
+            let (width, height) = icon.dimensions();
+            let bytes = Bytes::from(icon.into_vec());
+            Handle::from_rgba(width, height, bytes)
+        })
+}
+
+// This function return None if `path_to_file` resolves to a invalid name (`.` & `..`),
+// otherwise Some(..)
+fn get_file_elegant_name(path_to_file: &Path) -> Option<String> {
+    match VersionInfo::from_file(path_to_file) {
+        Ok(version_info) => {
+            if version_info.file_description.is_empty() {
+                file_name_from_path(path_to_file)
+            } else {
+                Some(version_info.file_description)
+            }
+        },
+        Err(_) => file_name_from_path(path_to_file)
+    }
+}
+
+fn file_name_from_path(path_to_file: &Path) -> Option<String> {
+    path_to_file
+        .file_name()
+        .map(|path_to_file| {
+            path_to_file.to_string_lossy().to_string()
+        })
+}
+
+pub fn list_running_apps(mut incorporable_apps: IncorporableApps) -> IncorporableApps {
+    // SAFETY: `lparam` is &mut IncorporableApps casted to LPARAM according to `enum_windows_proc`
+    // safety requirement. The mutable reference to `incorporable_apps` is not alive during the
+    // call to EnumWindows, so no two mutable references are alive at the same time.
     let res = unsafe { 
-        let lparam = LPARAM(incorporable_apps as *mut _ as isize);
-        EnumWindows(Some(enum_windows_proc), lparam) 
+        let lparam = LPARAM(&mut incorporable_apps as *mut _ as isize);
+
+        EnumWindows(Some(enum_windows_proc), lparam)
     };
+
+    incorporable_apps
 }
 
 // SAFETY: `lparam` must be a valid &mut IncorporableApps casted to a LPARAM 
@@ -215,69 +257,58 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         return skip;
     }
 
+     // SAFETY: `lparam` must be a valid &mut IncorporableApps casted to a LPARAM as remarked
+    let incorporable_apps = unsafe { 
+        &mut *(lparam.0 as *mut IncorporableApps) 
+    };
+
     let exe_path = unsafe {
         let mut pid = 0u32;
         let is_err = GetWindowThreadProcessId(hwnd, Some(&mut pid)) == 0;
 
         if is_err {
-            eprintln!("Error getting PID: {}", Error::from_thread());
+            eprintln!("Error getting PID: {}", WinError::from_thread());
             return skip;
         }
 
-        let Ok(process_handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-        else {
-            eprintln!("Error getting process handle: {}", Error::from_thread());
-            return skip;
-        };         
+        let process_handle = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(process_handle) => process_handle,
+            Err(err) => {
+                eprintln!("Error getting process handle: {err}");
+                return skip;                
+            }
+        };       
 
-        let win32_path_format = PROCESS_NAME_FORMAT(0);
-        let mut buf = [0u16; MAX_PATH as usize];
-        let mut len = buf.len() as u32;
-        
-        let res = QueryFullProcessImageNameW(
-            process_handle, win32_path_format, PWSTR(buf.as_mut_ptr()), &mut len
-        );
+        let mut exe_path_buf = [0u16; MAX_PATH as usize];
+        let mut path_len = exe_path_buf.len() as u32;
 
-        if CloseHandle(process_handle).is_err() || res.is_err() {
-            eprintln!("Error getting process handle: {}", Error::from_thread());
-            return skip;
-        }
+        let res = {
+            let win32_path_format = PROCESS_NAME_FORMAT(0);
 
-        String::from_utf16_lossy(&buf[..len as usize])
-    };
-
-    // SAFETY: `lparam` must be a valid &mut IncorporableApps casted to a LPARAM as remarked
-    let incorporable_apps = unsafe { 
-        &mut *(lparam.0 as *mut IncorporableApps) 
-    };
-
-    let path_already_exists = incorporable_apps
-        .running_apps()
-        .iter()
-        .any(|incorporable_app| incorporable_app.inner.exe_path == exe_path);
-
-    if path_already_exists {
-        // println!("Path already exists: {exe_path}");
-        return skip;
-    }
-
-    println!("{exe_path}");
-
-    let name = {
-        let as_path: &Path = exe_path.as_ref();
-
-        VersionInfo::from_file(as_path)
-            .map_or_else(
-                |_| as_path
-                    .file_name()
-                    .expect("`exe_path` resolves to a exeutable file, therefore a file name always exists")
-                    .to_string_lossy()
-                    .to_string(),
-                |version_info| version_info.file_description
+            QueryFullProcessImageNameW(
+                process_handle, win32_path_format, PWSTR(exe_path_buf.as_mut_ptr()), &mut path_len
             )
-    };
+        };
+            
+        if let Err(err) = res {
+            eprintln!("Error querying process image name: {err}");
+            return skip
+        }
 
-    let icon_in_bytes = match fetch_icon_in_bytes(&exe_path) {
+        if let Err(err) = CloseHandle(process_handle) {
+            eprintln!("Error closing process handle: {err}");
+            return skip;
+        }
+        if exe_path_already_exists(incorporable_apps.running_apps(), &exe_path_buf, path_len as usize) {
+            return skip;
+        }
+
+        String::from_utf16_lossy(&exe_path_buf[..path_len as usize])
+    };
+    let name = get_file_elegant_name(exe_path.as_ref())
+        .expect("`exe_path` resolves to a executable file");
+
+    let icon = match fetch_icon_in_bytes2(exe_path.as_ref()) {
         Ok(icon_in_bytes) => icon_in_bytes,
         Err(err) => {
             eprintln!("Error getting icon from lnk;\nPath to lnk: {exe_path:?};\nErr: {err:?}");
@@ -286,12 +317,38 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         }               
     };
 
-    let app = App::from(name, exe_path, icon_in_bytes);
+
+    let app = App::from(name, exe_path, icon);
     let incorporable_app = IncorporableApp::new_with(app);
 
     incorporable_apps.inner.push(incorporable_app);
 
     skip
+}
+
+fn exe_path_already_exists(
+    incorporable_apps: &[IncorporableApp], exe_path_buf: &[u16], path_len: usize
+) -> bool {
+    let reveresed_exe_path_as_chars = {
+        let exe_path_reverse_iter = exe_path_buf[0..path_len]
+            .iter().rev().copied();
+
+        char::decode_utf16(exe_path_reverse_iter)
+            .map(|decode_utf16_res| decode_utf16_res
+                .expect(
+                    "`exe_path_buf` should be valid UTF-16 per module docs (W-suffixed WinAPI only)"
+                )
+            )
+    };
+
+    incorporable_apps
+        .iter()
+        .any(|incorporable_app| incorporable_app.inner
+            .exe_path
+            .chars()
+            .rev()
+            .eq(reveresed_exe_path_as_chars.clone())
+        )   
 }
 
 fn is_window_visible(hwnd: HWND) -> bool {
@@ -328,7 +385,7 @@ fn is_window_visible(hwnd: HWND) -> bool {
     true
 }
 
-fn is_cloaked(hwnd: HWND) -> Result<bool, Error> {
+fn is_cloaked(hwnd: HWND) -> WinResult<bool> {
     let mut cloaked: u32 = 0;
     unsafe {
         let res = DwmGetWindowAttribute(
@@ -426,5 +483,15 @@ fn lnk_target_relative_to_absolute_path(abs_path_to_lnk: &Path, relative_path_to
         _ => Err(())
     }
 }   
+            // FIXME: return default icon if Err. also optimzation maybe available; this function
+            // is expensive as hell
+            let icon_in_bytes = match fetch_icon_in_bytes(&exe_path) {
+                Ok(icon_in_bytes) => icon_in_bytes,
+                Err(err) => {
+                    eprintln!("Error getting icon from lnk;\nPath to lnk: {path_to_lnk:?};\nErr: {err:?}");
+
+                    return;
+                }               
+            };
 */
 

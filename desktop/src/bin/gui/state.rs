@@ -11,12 +11,12 @@ use iced::{self, Background, Color, Element, Length, Padding, Size, Subscription
 use iced::alignment::{Horizontal, Vertical};
 use iced::font::{Font, Weight};
 use iced::widget::{
-    Button, 
+    Button, button, 
     Column, 
     Container, container, center,
     MouseArea, mouse_area,
     opaque,
-    Row, 
+    Row, row,
     Space, space, 
     Stack, stack,
     Text, text
@@ -328,7 +328,71 @@ where
     T: Into<Element<'a, M>>
 {}
 
+#[derive(Debug, Clone, Copy)]
+struct IsTabActive(bool);
 
+fn tab_button<'a, T, M>(
+    button_appearance: impl Fn(IsTabActive) -> Element<'a, M>,
+    current_selected_tab: T,
+    this_tab: T,
+    on_press: impl Fn() -> M + 'a
+) -> Element<'a, M> 
+where 
+    M: 'a + Clone,
+    T: Eq
+{
+    let is_tab_active = IsTabActive(this_tab == current_selected_tab);
+
+    if is_tab_active.0 {
+        button_appearance(is_tab_active)
+    } else {
+        Button::new(button_appearance(is_tab_active))
+            .on_press_with(on_press)
+            .padding(0)
+            .into()
+    }
+}
+
+fn tab_selection<'a, F, M, const N: usize, T>(
+    button_appearances: [(F, T); N],
+    current_selected_tab: T,
+    on_press: impl Fn(T) -> M + 'a
+) -> Element<'a, M> 
+where 
+    F: FnOnce(IsTabActive) -> Element<'a, M>,
+    M: 'a + Clone,
+    T: Eq
+{   
+    let tab_selection = button_appearances
+        .into_iter()
+        .map(|(button_appearance, this_tab)| {
+            let is_tab_active = IsTabActive(this_tab == current_selected_tab);
+
+            if is_tab_active.0 {
+                button_appearance(is_tab_active)
+            } else {
+                button(button_appearance(is_tab_active))
+                    .on_press(on_press(this_tab))
+                    .into()
+            }                  
+        });
+
+    row(tab_selection).into()
+}
+
+#[macro_export]
+macro_rules! tab_selection {
+    ($currently_selected_tab:expr, $on_press:expr, $(($button_appearance:expr, $this_tab:expr)),+) => {
+        let len = 0;
+
+       $(
+            len += 1;
+
+       ),+ 
+
+       
+    };
+}
 
 #[macro_export]
 macro_rules! make_uninteractable {

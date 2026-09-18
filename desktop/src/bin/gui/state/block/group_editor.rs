@@ -25,6 +25,7 @@ use sysinfo::{Process, ProcessRefreshKind, RefreshKind, System, UpdateKind};
 use tokio::time::{Duration, sleep};
 
 // Local
+use desktop::impl_deref_mut_for_newtype;
 use desktop::platform::ProcessName;
 use crate::state::{Action as BaseAction, LENGTH_UNIT};
 
@@ -342,11 +343,11 @@ fn process_logo(process: &Process) -> Image {
 struct App {
     name: String,
     exe_path: String,
-    icon: Bytes
+    icon: Handle
 }
 
 impl App {
-    fn from(name: String, exe_path: String, icon: Bytes) -> Self {
+    fn from(name: String, exe_path: String, icon: Handle) -> Self {
         Self {
             name,
             exe_path,
@@ -425,12 +426,27 @@ fn all_processes() -> Vec<ProcessInfo> {
 }
 
 fn ordering_by_alphabetical(a: &str, b: &str) -> Ordering {
-    let case_insenstive_ordering = a.bytes()
-        .map(|c| c.to_ascii_lowercase())
-        .cmp(b.bytes().map(|c| c.to_ascii_lowercase()));
-    
-    match case_insenstive_ordering {
-        Ordering::Equal => a.cmp(b),
-        _ => case_insenstive_ordering
+    let (mut a_bytes, mut b_bytes) = (a.bytes(), b.bytes());
+    loop {
+        match (a_bytes.next(), b_bytes.next()) {
+            (Some(a_byte), Some(b_byte)) => {
+                let case_insensitive_ordering = a_byte.to_ascii_lowercase()
+                    .cmp(&b_byte.to_ascii_lowercase());
+
+                if case_insensitive_ordering != Ordering::Equal {
+                    return case_insensitive_ordering;
+                } 
+
+                let case_sensitive_ordering = b_byte.cmp(&a_byte);
+
+                if case_sensitive_ordering != Ordering::Equal {
+                    return case_sensitive_ordering;
+                }
+            },
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (None, None) => return Ordering::Equal
+        } 
     }
 }
+

@@ -13,15 +13,17 @@ cfg_select! {
 
 use std::collections::HashSet;
 use std::iter;
+use std::ops::Range;
 
 use bytes::Bytes;
 
-use iced::{Element, Length};
+use iced::{Element, Length, Padding};
+use iced::alignment::{Vertical};
 use iced::widget::{button, column, row, scrollable, Space, text};
 use iced::widget::image::{Handle, Image};
 
 use crate::make_uninteractable;
-use crate::state::{action};
+use crate::state::{self, action, IsTabActive, LENGTH_UNIT, Pad};
 
 use super::{App};
 
@@ -112,6 +114,20 @@ fn app_list_tab_selection_header<'a>(current_selected_tab: AppListTab) -> Elemen
     let installed_tab_button = app_list_tab_button("Installed", AppListTab::Installed, current_selected_tab);
     let running_tab_button = app_list_tab_button("Running", AppListTab::Running, current_selected_tab);
 
+    let installed_tab_button = state::tab_button(
+        |_is_tab_active| "Installed".into(),
+        current_selected_tab, 
+        AppListTab::Installed, 
+        || Message::TabSelected(AppListTab::Installed)
+    );
+
+    let running_tab_button = state::tab_button(
+        |_is_tab_active| "Running".into(),
+        current_selected_tab, 
+        AppListTab::Running, 
+        || Message::TabSelected(AppListTab::Running)
+    );
+
     row![installed_tab_button, running_tab_button].into()
 }
 
@@ -131,7 +147,10 @@ fn incorporable_apps_column(incorporable_apps: &[IncorporableApp]) -> Element<'_
 
         });
 
-    scrollable(column(incorporable_apps)).into()
+    scrollable(column(incorporable_apps))
+        .spacing(0)
+        .height(*LENGTH_UNIT * 25.0)
+        .into()
 }
 
 fn display_incorporable_app<'a>(
@@ -148,38 +167,55 @@ fn display_incorporable_app<'a>(
 }
 
 fn display_selectable_app<'a>(
-    app: &'a App, button_text: &'a str, on_select: impl Fn() -> Message + 'a
+    app: &'a App, button_str: &'a str, on_press: impl Fn() -> Message + 'a
 ) -> Element<'a, Message> {
-    let icon = image(app.icon.clone());
-    let button = button(button_text)
-        .on_press_with(on_select);
+    let icon = Image::new(app.icon.clone());
+
+    let custom_text = |str| {
+        text(str)
+            .size(*LENGTH_UNIT * 1.5)
+            .align_y(Vertical::Center)
+            .height(*LENGTH_UNIT * 2.0)
+    };
+
+    let button = {
+        let button_text = custom_text(button_str);
+
+        button(button_text)
+            .on_press_with(on_press)
+            .padding(Padding::ZERO.horizontal(*LENGTH_UNIT / 2.0))
+    };
 
     row![
         icon, 
-        text(&app.name), 
+        custom_text(&app.name), 
         Space::new().width(Length::Fill), 
         button
-    ].into()
+    ]
+    .align_y(Vertical::Center)
+    .spacing(*LENGTH_UNIT / 2.0)
+    .padding(*LENGTH_UNIT / 2.0)
+    .into()
 } 
 
 fn selected_apps(selected_apps: &[App]) -> Element<'_, Message> {
-    let header = iter::once(Element::from("Selected"));
+    let header = iter::once(Element::from("Selected apps"));
 
     let removable_apps = selected_apps
         .iter()
         .enumerate()
         .map(|(i, app)| display_selectable_app(app, "Remove", move || Message::RemoveSelectedApp { idx: i }));
 
-    scrollable(
-        column(header.chain(removable_apps))
-    ).into()
+    scrollable(column(header.chain(removable_apps)))
+        .spacing(0)
+        .into()
 }
 
 fn image(bytes: Bytes) -> Image {
     Image::new(Handle::from_bytes(bytes))
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum AppListTab {
     #[default]
     Installed,
@@ -199,12 +235,15 @@ impl IncorporableApps {
         let installed_apps = platform::list_installed_apps();
         let running_apps_offset = installed_apps.len();
 
-        let mut incorporable_apps = Self {
+        let incorporable_apps = Self {
             inner: installed_apps,
             running_apps_offset
         };
 
-        platform::list_running_apps(&mut incorporable_apps);
+        let mut incorporable_apps = platform::list_running_apps(incorporable_apps);
+
+        incorporable_apps.inner[running_apps_offset..]
+            .sort_by(|a, b| desktop::ordering_by_alphabetical(&a.inner.name, &b.inner.name));
 
         incorporable_apps.inner.shrink_to_fit();
 
@@ -213,16 +252,29 @@ impl IncorporableApps {
     fn installed_apps(&self) -> &[IncorporableApp] {
         &self.inner[..self.running_apps_offset]
     }
+    fn installed_apps_mut(&mut self) -> &mut [IncorporableApp] {
+        &mut self.inner[..self.running_apps_offset]
+    }
     fn running_apps(&self) -> &[IncorporableApp] {
         &self.inner[self.running_apps_offset..]
     }
-    // `app` must exist inside `self`, otherwise the function will panic
+    fn running_apps_mut(&mut self) -> &mut [IncorporableApp] {
+        &mut self.inner[self.running_apps_offset..]
+    }
+
     fn set_app_is_selected_flag(&mut self, app: &App, flag: bool){ 
-        self.inner
-            .iter_mut()
-            .find(|incorporable_app| incorporable_app.inner == *app)
-            .unwrap()
-            .is_selected = flag
+        let set_app_is_selected_flag_in_slice = |apps: &mut [IncorporableApp]| {
+            let incorporable_app_opt = apps
+                .iter_mut()
+                .find(|incorporable_app| incorporable_app.inner.exe_path == app.exe_path);
+
+            if let Some(incorporable_app) = incorporable_app_opt {
+                incorporable_app.is_selected = flag;
+            }           
+        };
+
+        set_app_is_selected_flag_in_slice(self.installed_apps_mut());
+        set_app_is_selected_flag_in_slice(self.running_apps_mut());
     }
 }
 

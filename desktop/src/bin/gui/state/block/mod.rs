@@ -23,7 +23,7 @@ use desktop::{
     unwrap_variant,
 };
 
-
+use desktop::impl_deref_mut_for_newtype;
 use desktop::group::{AsId, BlockConfig, BlockRuleKind, Group, Id};
 use desktop::saved::{Group as SavedGroup, Saved};
 

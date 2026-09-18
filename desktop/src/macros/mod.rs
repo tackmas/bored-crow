@@ -21,8 +21,8 @@ macro_rules! wrapper_with_deref {
 
 #[macro_export]
 macro_rules! impl_deref_mut_for_newtype {
-    ($newtype_to_impl:ty, $target:ty) => {
-        impl std::ops::Deref for $newtype_to_impl {
+    ($newtype:ty, $target:ty) => {
+        impl std::ops::Deref for $newtype {
             type Target = $target;
 
             fn deref(&self) -> &Self::Target {
@@ -30,7 +30,7 @@ macro_rules! impl_deref_mut_for_newtype {
             }
         }
         
-        impl std::ops::DerefMut for $newtype_to_impl {
+        impl std::ops::DerefMut for $newtype {
             fn deref_mut(&mut self) -> &mut Self::Target {
                 &mut self.0
             }
