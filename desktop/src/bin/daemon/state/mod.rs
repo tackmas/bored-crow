@@ -171,9 +171,7 @@ impl State {
 
 
 pub async fn load_groups_from_disk(blocker: &Blocker) -> Vec<Arc<Group>> {
-    let Some(saved): Option<Saved> = Saved::load() else {
-        return Vec::new();
-    };
+    let saved = Saved::load();
 
     future::join_all(
         saved.groups

@@ -22,8 +22,7 @@ use iced::alignment::{Vertical};
 use iced::widget::{button, column, row, scrollable, Space, text};
 use iced::widget::image::{Handle, Image};
 
-use crate::make_uninteractable;
-use crate::state::{self, action, IsTabActive, LENGTH_UNIT, Pad};
+use crate::{action, IsTabActive, LENGTH_UNIT, make_uninteractable, Pad};
 
 use super::{App};
 
@@ -114,14 +113,14 @@ fn app_list_tab_selection_header<'a>(current_selected_tab: AppListTab) -> Elemen
     let installed_tab_button = app_list_tab_button("Installed", AppListTab::Installed, current_selected_tab);
     let running_tab_button = app_list_tab_button("Running", AppListTab::Running, current_selected_tab);
 
-    let installed_tab_button = state::tab_button(
+    let installed_tab_button = crate::tab_button(
         |_is_tab_active| "Installed".into(),
         current_selected_tab, 
         AppListTab::Installed, 
         || Message::TabSelected(AppListTab::Installed)
     );
 
-    let running_tab_button = state::tab_button(
+    let running_tab_button = crate::tab_button(
         |_is_tab_active| "Running".into(),
         current_selected_tab, 
         AppListTab::Running, 

@@ -16,18 +16,25 @@ pub struct Saved {
 }
 
 impl Saved {
-    pub fn load() -> Option<Self> {
+    fn new() -> Self {
+        Self {
+            groups: Vec::new()
+        }
+    }
+    pub fn load() -> Self {
         let path = state_path();
         let json = fs::read_to_string(&path).unwrap();
 
         Self::from_json(&json)
+            .unwrap_or_else(Self::new)
     }
 
-    pub async fn async_load() -> Option<Self> {
+    pub async fn async_load() -> Self {
         let path = async_state_path().await;
         let json = tokio::fs::read_to_string(&path).await.unwrap();
 
         Self::from_json(&json)
+            .unwrap_or_else(Self::new)
     }
 
     fn from_json(json: &str) -> Option<Self> {

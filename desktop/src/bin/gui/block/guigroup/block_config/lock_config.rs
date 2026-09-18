@@ -18,9 +18,9 @@ use iced::widget::{
 };
 
 use desktop::group::{LockConfig as CoreLockConfig, MoreLockConfig, Timer};
-use crate::state::{LENGTH_UNIT, Pad};
-use crate::state::action;
-use crate::state::modal::{self, radio_with_border, title};
+use crate::{LENGTH_UNIT, Pad};
+use crate::action;
+use crate::modal::{self, radio_with_border, title};
 
 use super::Tab;
 use super::timer;

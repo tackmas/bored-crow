@@ -25,8 +25,8 @@ use desktop::group::{
     BlockConfig as CoreBlockConfig, BlockRuleKind, Group, 
     LockWhenBlocked, Timer as CoreTimer, WeekScheduleT
 };
-use crate::state::modal;
-use crate::state::{
+use crate::modal;
+use crate::{
     action, bold_text, button_with_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text
 };
 use desktop::platform::Blocker;

@@ -27,7 +27,7 @@ use desktop::impl_deref_mut_for_newtype;
 use desktop::group::{AsId, BlockConfig, BlockRuleKind, Group, Id};
 use desktop::saved::{Group as SavedGroup, Saved};
 
-use crate::state::{action, handle_modal_action, Route, SCREEN_SIZE};
+use crate::{action, handle_modal_action, Route, SCREEN_SIZE};
 
 use guigroup::GUIGroup;
 use group_editor::{self as g_e, GroupEditor};

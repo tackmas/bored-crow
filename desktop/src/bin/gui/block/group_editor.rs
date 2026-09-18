@@ -27,7 +27,7 @@ use tokio::time::{Duration, sleep};
 // Local
 use desktop::impl_deref_mut_for_newtype;
 use desktop::platform::ProcessName;
-use crate::state::{Action as BaseAction, LENGTH_UNIT};
+use crate::{Action as BaseAction, LENGTH_UNIT};
 
 use self::apps_tab::{AppsTab, self as a_t};
 

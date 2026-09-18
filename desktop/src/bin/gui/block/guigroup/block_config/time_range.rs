@@ -25,9 +25,9 @@ use desktop::group::{
     BlockRuleKind, CustomWeek, LockConfig, TimeRange, 
     TimeRangesOnWeek, UniformWeekdays, WeekSchedule
 };
-use crate::state::grid::Grid;
-use crate::state::{bold_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
-use crate::state::modal::{horizontal_seperator, horizontal_seperator2, radio_with_border, title};
+use crate::grid::Grid;
+use crate::{bold_text, DARK_BEIGE, LENGTH_UNIT, Pad, RedBackground, semi_bold_text};
+use crate::modal::{horizontal_seperator, horizontal_seperator2, radio_with_border, title};
 
 #[derive(Clone, Copy)]
 enum Field {

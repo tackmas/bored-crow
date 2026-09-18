@@ -24,7 +24,7 @@ use desktop::group::{AsId, BlockConfig, BlockRuleKind, Group, Id};
 use desktop::platform::ProcessName;
 use desktop::saved::Group as SavedGroup;
 
-use crate::state::{action, button_with_text, Route, SCREEN_SIZE};
+use crate::{action, button_with_text, Route, SCREEN_SIZE};
 
 use super::group_editor::{self as g_e, GroupEditor};
 
