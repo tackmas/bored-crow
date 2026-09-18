@@ -21,7 +21,6 @@ pub fn main() {
         .unwrap();
 }
 
-
 enum Message {
     StateLoaded(State),
     State(state::Message),
@@ -39,7 +38,12 @@ impl GUI {
 
         let task = Task::perform(State::new(), Message::StateLoaded);
 
-        let stream = Stream::create_client().unwrap();
+        let stream = Stream::create_client()
+            .unwrap_or_else(|_| {
+                run_daemon();
+
+                Stream::create_client().unwrap()
+            });
 
         stream.send_signal(Signal::GUIStarted);
 
@@ -91,7 +95,7 @@ fn send_ipc_message(message: u8) -> Result<Stream, ()> {
         Err(_) => {
             println!("Daemon is not currently running");
 
-            start_daemon();
+            run_daemon();
 
             let timeout = Duration::from_secs(10);
             let start = Instant::now();
@@ -115,21 +119,25 @@ fn send_ipc_message(message: u8) -> Result<Stream, ()> {
     Ok(stream)
 }
 
-fn start_daemon() {
-    use std::env::current_exe;
-    use std::process::Command;
+cfg_select! {
+    windows => { 
+        fn run_daemon() {
+            use std::env::current_exe;
+            use std::os::windows::process::CommandExt;
+            use std::process::Command;
 
-    let current_exe = current_exe().unwrap();
+            const DETACHED_PROCESS: u32 = 0x00000008;
+            const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+            const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x01000000;
 
-    let dir = current_exe.parent().unwrap();
+            let current_exe = current_exe().unwrap();
+            let dir = current_exe.parent().unwrap();
+            let daemon_exe_path = dir.join("daemon.exe");
 
-    #[cfg(target_os = "windows")]
-    let daemon_exe = dir.join("daemon.exe");
-
-    #[cfg(not(target_os = "windows"))]
-    let daemon_exe = dir.join("daemon");
-
-    Command::new(&daemon_exe).spawn().unwrap();
-
-    println!("Starting daemon")
+            Command::new(daemon_exe_path)
+                .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB)
+                .spawn()
+                .unwrap();
+        }
+    }
 }

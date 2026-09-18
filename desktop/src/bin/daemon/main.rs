@@ -175,8 +175,9 @@ fn on_shutdown(shutdown: Shutdown) {
              };
             
             // Relevant to UNIX platforms only:
-            // Parent (this binary) will exit after this call, and the child's parent will become init,
-            // which periodically calls wait on the child. Therefore no zombie process will be left behind
+            // Parent (this binary) will exit after this call, and the child's parent will become `init`,
+            // which periodically calls `wait` on the child, reaping it. 
+            // Therefore no zombie process will be left behind.
             #[allow(clippy::zombie_processes)]
             Command::new(restarter_path)
                 .spawn()

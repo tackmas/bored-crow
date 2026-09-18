@@ -66,11 +66,9 @@ impl IPCClientExt for Stream {
             .to_ns_name::<GenericNamespaced>()
             .unwrap();
 
-        let stream_result = ConnectOptions::new()
+        ConnectOptions::new()
             .name(socket_name)
-            .connect_sync();
-
-        stream_result
+            .connect_sync()
     }
     fn send_signal(mut self, signal: Signal) {
         self.write_all(&[signal as u8]).unwrap();

@@ -45,6 +45,8 @@ impl State {
             .unwrap();
         let groups = load_groups_from_disk(&blocker).await;
 
+
+
         Self { 
             blocker, 
             groups,
@@ -53,7 +55,6 @@ impl State {
     }
     pub async fn run(&mut self) {
         //std::thread::spawn(run_time_change_watcher);
-
         let local_set = LocalSet::new();
 
         local_set.run_until(async {
@@ -72,7 +73,14 @@ impl State {
             let msg = server.recieve().await;
 
             match msg {
-                ServerBound::Signal(signal) => self.handle_signal(signal).await,
+                ServerBound::Signal(signal) => {
+                    let action = self.handle_signal(signal).await;
+
+                    match action {
+                        Action::None => (),
+                        Action::Return => break
+                    };
+                },
                 ServerBound::Request(request, response_token) => {
                     println!("Recieved request");
 
@@ -84,7 +92,7 @@ impl State {
         }
     }
 
-    async fn handle_signal(&mut self, signal: Signal) {
+    async fn handle_signal(&mut self, signal: Signal) -> Action {
         match signal {
             Signal::GUIStarted => {
                 for g in &self.groups {
@@ -96,9 +104,20 @@ impl State {
             },
             Signal::GUIExited => {
                 self.groups = load_groups_from_disk(&self.blocker).await;
+
+                let is_any_group_blocked = self.groups
+                    .iter()
+                    .any(|group| group.is_blocked());
+
+                if !is_any_group_blocked {
+                    return Action::Return;
+                }
+
                 println!("Notify GUI shutdown");
             }
         }       
+
+        Action::None
     }
 
     async fn handle_request(&mut self, request: Request) -> Response {
@@ -163,6 +182,11 @@ pub async fn load_groups_from_disk(blocker: &Blocker) -> Vec<Arc<Group>> {
                 Group::from_saved(saved_group, blocker)
             })
     ).await
+}
+
+enum Action {
+    None,
+    Return
 }
 
 
